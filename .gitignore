@@ -1,0 +1,7 @@
+*.d
+*.o
+*.out
+cscope.*
+tags
+vpmu-control-arm
+vpmu-control-x86
