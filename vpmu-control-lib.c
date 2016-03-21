@@ -93,7 +93,7 @@ int vpmu_read_file(char *path, char **buffer)
             pch = strtok(NULL, ":");
         }
         if (fp == NULL) {
-            printf("vpmu-control: File not found\n");
+            printf("vpmu-control: File (%s) not found\n", path);
             exit(-1);
         }
     }
@@ -242,6 +242,9 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 int j;
                 //Locate the last string in the path
                 for (j = 1; j < strlen(cmd); j++) {
+                    if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
+                        break;
+                    }
                     if (cmd[j] == '/' && cmd[j - 1] != '\\') {
                         index = j + 1;
                     }
