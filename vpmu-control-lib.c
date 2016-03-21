@@ -259,10 +259,15 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 int size = vpmu_read_file(file_path, &buffer);
                 handler->ptr[17] = (int)size;
                 handler->ptr[18] = (int)buffer;
+
+                vpmu_fork_exec(cmd);
+
+                char null_str = '\0';
+                handler->ptr[16] = (int)&null_str;
             }
-            vpmu_fork_exec(cmd);
-            char null_str = '\0';
-            handler->ptr[16] = (int)&null_str;
+            else {
+                vpmu_fork_exec(cmd);
+            }
             free(cmd);
         }
     }
