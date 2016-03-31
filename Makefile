@@ -13,7 +13,7 @@ all:	$(TARGETS)
 
 vpmu-control-x86:	$(SRCS)
 	@echo "  CC      $@"
-	@$(CC) $^ -o $@ $(CFLAGS) $(LFLAGS)
+	@$(CC) $^ -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
 
 vpmu-control-arm:	$(SRCS)
 	@echo "  ARM_CC  $@"

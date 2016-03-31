@@ -1,6 +1,7 @@
 #ifndef __VPMU_CONTROL_LIB_H
 #define __VPMU_CONTROL_LIB_H
 #include <sys/types.h>
+#include <stdint.h>
 
 #define VPMU_PHYSICAL_ADDRESS 0xf1000000
 
@@ -17,12 +18,13 @@
 
 typedef struct VPMU_HANDLER {
     int fd;
-    unsigned int *ptr; //TODO make address alignment to 64
+    uintptr_t *ptr; //TODO make address alignment to 64
     int flag_jit, flag_trace;
 } VPMU_HANDLER;
 typedef VPMU_HANDLER* vpmu_handler_t;
 
 #define STR_IS(__A, __B) (strcmp(__A, __B) == 0)
+#define STR_IS_2(__A, __B, __B2) ((strcmp(__A, __B) == 0) || (strcmp(__A, __B2) == 0))
 
 vpmu_handler_t vpmu_open(off_t vpmu_address);
 void vpmu_close(vpmu_handler_t handler);
