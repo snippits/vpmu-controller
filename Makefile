@@ -1,29 +1,28 @@
 CC=gcc
-ARM_CC=arm-none-linux-gnueabi-gcc
+ARM_CC=arm-linux-gnueabi-gcc
 CFLAGS=-g -Wall -O1
 LFLAGS=
 
 SRCS=vpmu-control.c vpmu-control-lib.c efd.c
-DEPS=$(patsubst %.c,%.d,$(SRCS))
-TARGETS=vpmu-control-arm vpmu-control-x86
+HEADERS=vpmu-control-lib.h
+TARGETS=vpmu-control-arm vpmu-control-x86 vpmu-control-dry-run
 
 .PHONY: all clean
 
 all:	$(TARGETS)
 
-vpmu-control-x86:	$(SRCS)
+vpmu-control-x86:	$(SRCS) $(HEADERS)
 	@echo "  CC      $@"
-	@$(CC) $^ -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
+	@$(CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS)
 
-vpmu-control-arm:	$(SRCS)
+vpmu-control-dry-run:	$(SRCS) $(HEADERS)
+	@echo "  CC      $@"
+	@$(CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
+
+vpmu-control-arm:	$(SRCS) $(HEADERS)
 	@echo "  ARM_CC  $@"
-	@$(ARM_CC) $^ -o $@ $(CFLAGS) $(LFLAGS)
+	@$(ARM_CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS)
 
 clean:
-	rm $(TARGETS) $(DEPS)
+	rm $(TARGETS)
 
-%.d:	%.c
-	@$(CC) -MM $^ > $@
-
-# Include automatically generated dependency files
--include $(DEPS)

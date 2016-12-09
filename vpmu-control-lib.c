@@ -16,7 +16,7 @@
 #endif
 
 #ifdef DRY_RUN
-#define DRY_MSG(str, ...) fprintf(stderr, "\033[1;32m"str"\033[0;00m", ##__VA_ARGS__)
+#define DRY_MSG(str, ...) fprintf(stderr, "\033[1;32m" str "\033[0;00m", ##__VA_ARGS__)
 #else
 #define DRY_MSG(str, ...) {}
 #endif
@@ -33,18 +33,15 @@ vpmu_handler_t vpmu_open(off_t vpmu_address)
         printf("ERROR: Open Failed\n");
         exit(-1);
     }
-    handler->ptr = (unsigned int *)mmap(
-            NULL,
-            1024,
-            PROT_READ | PROT_WRITE, MAP_SHARED,
-            handler->fd,
-            vpmu_address);
+    handler->ptr = (uintptr_t *)mmap(
+      NULL, 1024, PROT_READ | PROT_WRITE, MAP_SHARED, handler->fd, vpmu_address);
     if (handler->ptr == MAP_FAILED) {
         printf("ERROR: Map Failed\n");
         exit(-1);
     }
+    handler->flag_model = 0;
     handler->flag_trace = 0;
-    handler->flag_jit = 0;
+    handler->flag_jit   = 0;
 #endif
 
     return handler;
@@ -61,27 +58,31 @@ void vpmu_close(vpmu_handler_t handler)
     free(handler);
 }
 
-
 void vpmu_print_help_message(char *self)
 {
-#define HELP_MESG \
-    "Usage: %s [options] {actions...}\n" \
-    "Options:\n" \
-    "  --jit         Enable just-in-time model selection on performance simulation\n" \
-    "  --trace       Enable VPMU SET and user process function tracking ability\n" \
-    "                If \"--trace\" is set, the process will be traced automatically\n" \
-    "  --help        Show this message\n" \
-    "\n\n" \
-    "Actions:\n" \
-    "  -r, --read  <address>          Read data from <address> of VPMU and print it out with \"\\n\"\n" \
-    "  -w, --write <address> <data>   Write <data> to <address> of VPMU\n" \
-    "  --start       Start VPMU profiling with all performance simulators ON\n" \
-    "                If \"--trace\" is set, \"--start\" do nothing\n" \
-    "  --end         End/Stop VPMU profiling and report the results\n" \
-    "                If \"--trace\" is set, \"--end\" do nothing\n" \
-    "  --report      Simply report the current results. It can be used while profiling \n" \
-    "  -e, --exec    Run the program/executable.\n" \
-    "                If \"--trace\" is set, the controller will also pass some of the sections\n" \
+#define HELP_MESG                                                                        \
+    "Usage: %s [options] {actions...}\n"                                                 \
+    "Options:\n"                                                                         \
+    "  --jit         Enable just-in-time model selection on performance simulation\n"    \
+    "  --trace       Enable VPMU SET and user process function tracking ability\n"       \
+    "                If \"--trace\" is set, the process will be traced automatically\n"  \
+    "  --[MODEL]     [MODEL] could be one of the following\n"                            \
+    "                    inst, cache, branch, pipeline, all_models\n"                    \
+    "  --help        Show this message\n"                                                \
+    "\n\n"                                                                               \
+    "Actions:\n"                                                                         \
+    "  -r, --read  <address>          Read data from <address> of VPMU and print it "    \
+    "out with \"\\n\"\n"                                                                 \
+    "  -w, --write <address> <data>   Write <data> to <address> of VPMU\n"               \
+    "  --start       Start VPMU profiling with all performance simulators ON\n"          \
+    "                If \"--trace\" is set, \"--start\" do nothing\n"                    \
+    "  --end         End/Stop VPMU profiling and report the results\n"                   \
+    "                If \"--trace\" is set, \"--end\" do nothing\n"                      \
+    "  --report      Simply report the current results. It can be used while profiling " \
+    "\n"                                                                                 \
+    "  -e, --exec    Run the program/executable.\n"                                      \
+    "                If \"--trace\" is set, the controller will also pass some of the "  \
+    "sections\n"                                                                         \
     "                (i.e. symbol table, dynamic libraries) of target binary to VPMU.\n" \
     "\n"
 
@@ -90,10 +91,10 @@ void vpmu_print_help_message(char *self)
 
 static int locate_binary(char *path, char *out_path)
 {
-    FILE *fp = NULL;
+    FILE *fp       = NULL;
     char *sys_path = strdup(getenv("PATH"));
     char *pch;
-    char full_path[1024] = {0};
+    char  full_path[1024] = {0};
 
     fp = fopen(path, "rb");
     if (fp == NULL) {
@@ -102,7 +103,7 @@ static int locate_binary(char *path, char *out_path)
             strcpy(full_path, pch);
             int size = strlen(full_path);
             if (full_path[size - 1] != '/') {
-                full_path[size] = '/';
+                full_path[size]     = '/';
                 full_path[size + 1] = '\0';
             }
             strcat(full_path, path);
@@ -113,8 +114,10 @@ static int locate_binary(char *path, char *out_path)
     }
 
     free(sys_path);
-    if (fp != NULL) fclose(fp);
-    else return -1;
+    if (fp != NULL)
+        fclose(fp);
+    else
+        return -1;
     strcpy(out_path, full_path);
     return 0;
 }
@@ -122,10 +125,10 @@ static int locate_binary(char *path, char *out_path)
 int vpmu_read_file(char *path, char **buffer)
 {
     FILE *fp = NULL;
-    int file_size;
+    int   file_size;
     char *sys_path = strdup(getenv("PATH"));
     char *pch;
-    char full_path[1024] = {0};
+    char  full_path[1024] = {0};
 
     fp = fopen(path, "rb");
     if (fp == NULL) {
@@ -134,7 +137,7 @@ int vpmu_read_file(char *path, char **buffer)
             strcpy(full_path, pch);
             int size = strlen(full_path);
             if (full_path[size - 1] != '/') {
-                full_path[size] = '/';
+                full_path[size]     = '/';
                 full_path[size + 1] = '\0';
             }
             strcat(full_path, path);
@@ -166,34 +169,33 @@ int vpmu_read_file(char *path, char **buffer)
     return file_size;
 }
 
-static void trim(char *s) {
-    char * p = s;
-    int l = strlen(p);
+static void trim(char *s)
+{
+    char *p = s;
+    int   l = strlen(p);
 
-    while(isspace(p[l - 1])) p[--l] = 0;
-    while(* p && isspace(* p)) ++p, --l;
+    while (isspace(p[l - 1])) p[--l] = 0;
+    while (*p && isspace(*p)) ++p, --l;
 
     memmove(s, p, l + 1);
 }
 
 void vpmu_fork_exec(char *cmd)
 {
-    pid_t pid = fork();
+    pid_t pid      = fork();
     char *args[64] = {NULL};
-    int i, idx = 0;
-    int size = strlen(cmd);
+    int   i, idx = 0;
+    int   size = strlen(cmd);
     char *pch;
 
     if (pid == -1) {
         printf("error, failed to fork()");
-    }
-    else if (pid > 0) {
+    } else if (pid > 0) {
         int status;
         waitpid(pid, &status, 0);
-    }
-    else {
+    } else {
         printf("command: %s\n", cmd);
-        //String tokenize
+        // String tokenize
         for (i = 1; i < size; i++) {
             if (cmd[i] == ' ' && cmd[i - 1] != '\\') {
                 cmd[i] = '\0';
@@ -201,52 +203,65 @@ void vpmu_fork_exec(char *cmd)
         }
 
         pch = &cmd[0];
-        i = 0;
+        i   = 0;
         while (pch != NULL) {
             if (pch[0] != '\0') {
-                //printf("pch: %s\n", pch);
+                // printf("pch: %s\n", pch);
                 args[idx++] = pch;
             }
-            for (; i < size && cmd[i] != '\0'; i++);
-            if (i == size) pch = NULL;
-            else pch = &cmd[i + 1];
+            for (; i < size && cmd[i] != '\0'; i++)
+                ;
+            if (i == size)
+                pch = NULL;
+            else
+                pch = &cmd[i + 1];
             i++;
         }
 
         // we are the child
         execvp(args[0], args);
-        _exit(EXIT_FAILURE);   // exec never returns
+        _exit(EXIT_FAILURE); // exec never returns
     }
 }
 
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 {
     vpmu_handler_t handler;
-    int i;
-    char *buffer = NULL;
+    int            i;
+    char *         buffer = NULL;
 
     if (argc < 2) {
         vpmu_print_help_message(argv[0]);
         printf("Too less arguments\n");
         exit(-1);
     }
-    handler = vpmu_open(VPMU_PHYSICAL_ADDRESS);
+    handler = vpmu_open(VPMU_DEVICE_BASE_ADDR);
 
     /* First Parse Settings/Configurations */
     for (i = 0; i < argc; i++) {
         if (STR_IS(argv[i], "--jit")) {
             DRY_MSG("enable jit\n");
             handler->flag_jit = 1;
-        }
-        else if (STR_IS(argv[i], "--trace")) {
+            handler->flag_model |= VPMU_JIT_MODEL_SELECT;
+        } else if (STR_IS(argv[i], "--trace")) {
             DRY_MSG("enable trace\n");
             handler->flag_trace = 1;
-        }
-        else if (STR_IS(argv[i], "--help")) {
+            handler->flag_model |= VPMU_EVENT_TRACE;
+        } else if (STR_IS(argv[i], "--inst")) {
+            handler->flag_model |= VPMU_INSN_COUNT_SIM;
+        } else if (STR_IS(argv[i], "--cache")) {
+            handler->flag_model |= VPMU_ICACHE_SIM | VPMU_DCACHE_SIM;
+        } else if (STR_IS(argv[i], "--branch")) {
+            handler->flag_model |= VPMU_BRANCH_SIM;
+        } else if (STR_IS(argv[i], "--pipeline")) {
+            handler->flag_model |= VPMU_PIPELINE_SIM;
+        } else if (STR_IS(argv[i], "--all_models")) {
+            handler->flag_model |= VPMU_INSN_COUNT_SIM | VPMU_ICACHE_SIM | VPMU_DCACHE_SIM
+                                   | VPMU_BRANCH_SIM | VPMU_PIPELINE_SIM;
+        } else if (STR_IS(argv[i], "--help")) {
             vpmu_print_help_message(argv[0]);
             exit(0);
-        }
-        else if (STR_IS(argv[i], "-h")) {
+        } else if (STR_IS(argv[i], "-h")) {
             vpmu_print_help_message(argv[0]);
             exit(0);
         }
@@ -254,52 +269,43 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
     /* Then parse all the action arguments */
     for (i = 0; i < argc; i++) {
-        //fprintf(stderr, "argv[%d] = %s\n", i, argv[i]);
+        // fprintf(stderr, "argv[%d] = %s\n", i, argv[i]);
         if (STR_IS_2(argv[i], "--read", "-r")) {
             int index = atoi(argv[++i]);
-            int value = handler->ptr[index];
+            int value = HW_R(index);
             DRY_MSG("read %d\n", index);
             printf("%d\n", value);
-        }
-        else if (STR_IS_2(argv[i], "--write", "-w")) {
+        } else if (STR_IS_2(argv[i], "--write", "-w")) {
             int index = atoi(argv[++i]);
             int value = atoi(argv[++i]);
             DRY_MSG("write %d at address %d\n", value, index);
-            handler->ptr[index] = value;
-        }
-        else if (STR_IS(argv[i], "--start")) {
+            HW_W(index, value);
+        } else if (STR_IS(argv[i], "--start")) {
             DRY_MSG("--start\n");
-            if (handler->flag_trace == 0) {
-                if (handler->flag_jit)
-                    handler->ptr[0] = 8;
-                else
-                    handler->ptr[0] = 6;
-            }
-        }
-        else if (STR_IS(argv[i], "--end")) {
+            HW_W(VPMU_MMAP_ENABLE, handler->flag_model);
+        } else if (STR_IS(argv[i], "--end")) {
             DRY_MSG("--end\n");
             if (handler->flag_trace == 0) {
-                handler->ptr[0] = 1;
+                // Only disable VPMU manually when it's not in trace mode
+                HW_W(VPMU_MMAP_DISABLE, ANY_VALUE);
             }
-        }
-        else if (STR_IS(argv[i], "--report")) {
+        } else if (STR_IS(argv[i], "--report")) {
             DRY_MSG("--report\n");
-            handler->ptr[0] = 11;
-        }
-        else if (STR_IS_2(argv[i], "--exec", "-e")) {
+            HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
+        } else if (STR_IS_2(argv[i], "--exec", "-e")) {
             char *cmd = strdup(argv[++i]);
             trim(cmd);
-            //Dealing with escape space at the end of command
+            // Dealing with escape space at the end of command
             if (cmd[strlen(cmd) - 1] == '\\') {
-                cmd[strlen(cmd)] = ' ';
+                cmd[strlen(cmd)]     = ' ';
                 cmd[strlen(cmd) + 1] = '\0';
             }
 
             if (handler->flag_trace) {
                 char exec_name[256] = {0}, file_path[256] = {0}, args[256] = {0};
-                int index = 0, index_path_end = 0;
-                int j;
-                //Locate the last string in the path
+                int  index = 0, index_path_end = 0;
+                int  j;
+                // Locate the last string in the path
                 for (j = 1; j < strlen(cmd); j++) {
                     if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
                         break;
@@ -308,24 +314,25 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                         index = j + 1;
                     }
                 }
-                //Find the end of the path
-                for (j = index; j < strlen(cmd) && cmd[j] != ' '; j++);
+                // Find the end of the path
+                for (j = index; j < strlen(cmd) && cmd[j] != ' '; j++)
+                    ;
                 index_path_end = j;
 
                 strncpy(file_path, cmd, index_path_end);
                 strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
 
                 strncpy(exec_name, cmd + index, index_path_end - index);
-                handler->ptr[16] = (uintptr_t)exec_name;
+                HW_W(VPMU_MMAP_SET_PROC_NAME, exec_name);
 
-                int size = vpmu_read_file(file_path, &buffer);
-                handler->ptr[17] = (uintptr_t)size;
-                handler->ptr[18] = (uintptr_t)buffer;
+                uintptr_t size = vpmu_read_file(file_path, &buffer);
+                HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
+                HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
 
                 char full_path[1024] = {0};
                 locate_binary(file_path, full_path);
                 DRY_MSG("binary path = %s\n", full_path);
-                DRY_MSG("binary size = %d\n", size);
+                DRY_MSG("binary size = %lu\n", size);
                 DRY_MSG("buffer pointer = %p\n", buffer);
 #ifdef DRY_RUN
                 EFD *efd = efd_open_elf(full_path);
@@ -335,9 +342,8 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 vpmu_fork_exec(cmd);
 
                 char null_str = '\0';
-                handler->ptr[16] = (uintptr_t)&null_str;
-            }
-            else {
+                HW_W(VPMU_MMAP_SET_PROC_NAME, &null_str);
+            } else {
                 vpmu_fork_exec(cmd);
             }
             free(cmd);
@@ -346,5 +352,3 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
     return handler;
 }
-
-

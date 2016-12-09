@@ -5,3 +5,4 @@ cscope.*
 tags
 vpmu-control-arm
 vpmu-control-x86
+vpmu-control-dry-run
