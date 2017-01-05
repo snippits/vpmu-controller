@@ -299,7 +299,9 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             HW_W(index, value);
         } else if (STR_IS(argv[i], "--start")) {
             DRY_MSG("--start\n");
-            HW_W(VPMU_MMAP_ENABLE, handler->flag_model);
+            if (handler->flag_trace == 0) {
+                HW_W(VPMU_MMAP_ENABLE, handler->flag_model);
+            }
         } else if (STR_IS(argv[i], "--end")) {
             DRY_MSG("--end\n");
             if (handler->flag_trace == 0) {
