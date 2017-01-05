@@ -27,6 +27,7 @@
 #define VPMU_PIPELINE_SIM           0x1 << 4
 #define VPMU_JIT_MODEL_SELECT       0x1 << 5
 #define VPMU_EVENT_TRACE            0x1 << 6
+#define VPMU_WHOLE_SYSTEM           0x1 << 7
 
 #define vpmu_model_has(model, vpmu) (vpmu.timing_model & (model))
 
