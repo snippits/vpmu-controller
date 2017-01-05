@@ -188,9 +188,10 @@ static void trim(char *s)
 void vpmu_fork_exec(char *cmd)
 {
     pid_t pid      = fork();
-    char *args[64] = {NULL};
+    char *args[128] = {NULL};
     int   i, idx = 0;
     int   size = strlen(cmd);
+    int flag_string = 0;
     char *pch;
 
     if (pid == -1) {
@@ -202,7 +203,13 @@ void vpmu_fork_exec(char *cmd)
         printf("command: %s\n", cmd);
         // String tokenize
         for (i = 1; i < size; i++) {
-            if (cmd[i] == ' ' && cmd[i - 1] != '\\') {
+            if (flag_string == 0 && (cmd[i] == '"' || cmd[i] == '\'')) {
+                flag_string = 1;
+            }
+            else if (flag_string == 1 && (cmd[i] == '"' || cmd[i] == '\'')) {
+                flag_string = 0;
+            }
+            if (flag_string == 0 && cmd[i] == ' ' && cmd[i - 1] != '\\') {
                 cmd[i] = '\0';
             }
         }
@@ -222,7 +229,12 @@ void vpmu_fork_exec(char *cmd)
                 pch = &cmd[i + 1];
             i++;
         }
-
+#ifdef DRY_RUN
+        for (i = 0; i < 128; i++) {
+            if (strlen(args[i]) > 0)
+                printf("%s\n", args[i]);
+        }
+#endif
         // we are the child
         execvp(args[0], args);
         _exit(EXIT_FAILURE); // exec never returns
@@ -338,13 +350,14 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
                 char full_path[1024] = {0};
                 locate_binary(file_path, full_path);
-                DRY_MSG("binary path = %s\n", full_path);
-                DRY_MSG("binary size = %lu\n", size);
-                DRY_MSG("buffer pointer = %p\n", buffer);
+                DRY_MSG("command          : %s\n", cmd);
+                DRY_MSG("binary path      : %s\n", full_path);
+                DRY_MSG("binary size      : %lu\n", size);
+                DRY_MSG("buffer pointer   : %p\n", buffer);
 #ifdef DRY_RUN
-                EFD *efd = efd_open_elf(full_path);
-                dump_symbol_table(efd);
-                efd_close(efd);
+                //EFD *efd = efd_open_elf(full_path);
+                //dump_symbol_table(efd);
+                //efd_close(efd);
 #endif
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
                 vpmu_fork_exec(cmd);
