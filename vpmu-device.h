@@ -10,10 +10,13 @@
 #define VPMU_MMAP_ENABLE            0x0000
 #define VPMU_MMAP_DISABLE           0x0008
 #define VPMU_MMAP_REPORT            0x0010
+#define VPMU_MMAP_RESET             0x0018
+#define VPMU_MMAP_SET_TIMING_MODEL  0x0020
 // ... reserved
-#define VPMU_MMAP_SET_PROC_NAME     0x0040
-#define VPMU_MMAP_SET_PROC_SIZE     0x0048
-#define VPMU_MMAP_SET_PROC_BIN      0x0050
+#define VPMU_MMAP_ADD_PROC_NAME     0x0040
+#define VPMU_MMAP_REMOVE_PROC_NAME  0x0048
+#define VPMU_MMAP_SET_PROC_SIZE     0x0050
+#define VPMU_MMAP_SET_PROC_BIN      0x0054
 // ... reserved
 
 // Mode selector
@@ -30,4 +33,3 @@
 void vpmu_dev_init(uint32_t base);
 
 #endif
-

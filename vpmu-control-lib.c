@@ -64,7 +64,7 @@ void vpmu_print_help_message(char *self)
     "Usage: %s [options] {actions...}\n"                                                 \
     "Options:\n"                                                                         \
     "  --jit         Enable just-in-time model selection on performance simulation\n"    \
-    "  --trace       Enable VPMU SET and user process function tracking ability\n"       \
+    "  --trace       Enable VPMU event tracing and function tracking ability\n"          \
     "                If \"--trace\" is set, the process will be traced automatically\n"  \
     "  --[MODEL]     [MODEL] could be one of the following\n"                            \
     "                    inst, cache, branch, pipeline, all_models\n"                    \
@@ -118,7 +118,12 @@ static int locate_binary(char *path, char *out_path)
         fclose(fp);
     else
         return -1;
-    strcpy(out_path, full_path);
+    if (strlen(full_path) == 0) {
+        strcpy(out_path, path);
+    }
+    else {
+        strcpy(out_path, full_path);
+    }
     return 0;
 }
 
@@ -288,6 +293,7 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             if (handler->flag_trace == 0) {
                 // Only disable VPMU manually when it's not in trace mode
                 HW_W(VPMU_MMAP_DISABLE, ANY_VALUE);
+                HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
             }
         } else if (STR_IS(argv[i], "--report")) {
             DRY_MSG("--report\n");
@@ -323,7 +329,8 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
 
                 strncpy(exec_name, cmd + index, index_path_end - index);
-                HW_W(VPMU_MMAP_SET_PROC_NAME, exec_name);
+                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
+                HW_W(VPMU_MMAP_ADD_PROC_NAME, exec_name);
 
                 uintptr_t size = vpmu_read_file(file_path, &buffer);
                 HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
@@ -339,10 +346,11 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 dump_symbol_table(efd);
                 efd_close(efd);
 #endif
+                HW_W(VPMU_MMAP_RESET, ANY_VALUE);
                 vpmu_fork_exec(cmd);
 
-                char null_str = '\0';
-                HW_W(VPMU_MMAP_SET_PROC_NAME, &null_str);
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, exec_name);
+                HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
             } else {
                 vpmu_fork_exec(cmd);
             }
