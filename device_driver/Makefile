@@ -6,6 +6,10 @@ endif
 
 TARGET_MODULE:=vpmu-device$(KO_POSTFIX)
 
+ifneq ($(DRY_RUN),)
+ccflags-y := -DDRY_RUN
+endif
+
 # If we running by kernel building system
 ifneq ($(KERNELRELEASE),)
 	$(TARGET_MODULE)-objs := main.o device_file.o
@@ -18,11 +22,11 @@ else
 
 all : 
 # run kernel build system to make module
-	$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) modules
+	@$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) modules
 
 clean:
 # run kernel build system to cleanup in current directory
-	$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) clean
+	@$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) clean
 
 load:
 	insmod ./$(TARGET_MODULE).ko
