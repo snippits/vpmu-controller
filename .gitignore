@@ -1,8 +1,25 @@
+# Common binaries
 *.d
 *.o
 *.out
+
+# cscope ctags
 cscope.*
 tags
+
+# generated binaries
 vpmu-control-arm
 vpmu-control-x86
 vpmu-control-dry-run
+
+# Linux headers
+*.ko
+*.cmd
+.tmp_versions
+*.mod.c
+*.symvers
+*.order
+
+# Files for user to modify
+path.mak
+
