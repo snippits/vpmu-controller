@@ -8,9 +8,9 @@
 #include "../vpmu-device.h"
 
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_AUTHOR("Danil Ishkov, Apriorit");
+MODULE_AUTHOR("Medicine Yeh");
 
-/*===============================================================================================*/
+/*=====================================================================================*/
 static int simple_driver_init(void)
 {
     int result = 0;
@@ -28,11 +28,21 @@ static int simple_driver_init(void)
 
 #ifndef DRY_RUN
     vpmu_base = ioremap(VPMU_DEVICE_BASE_ADDR, VPMU_DEVICE_IOMEM_SIZE);
+#define SET_ARG(_OFFSET, _VAL)                                                           \
+    VPMU_IO_WRITE(vpmu_base + VPMU_MMAP_OFFSET_##_OFFSET, (_VAL));
+    SET_ARG(FILE_f_path_dentry,
+            (unsigned long)offsetof(struct file, f_path)
+              + (unsigned long)offsetof(struct path, dentry));
+    SET_ARG(DENTRY_d_iname, (unsigned long)offsetof(struct dentry, d_iname));
+    SET_ARG(DENTRY_d_parent, (unsigned long)offsetof(struct dentry, d_parent));
+    SET_ARG(THREAD_INFO_task, (unsigned long)offsetof(struct thread_info, task));
+    SET_ARG(TASK_STRUCT_pid, (unsigned long)offsetof(struct task_struct, pid));
+#undef SET_ARG
 #endif
     result = register_device();
     return result;
 }
-/*-----------------------------------------------------------------------------------------------*/
+/*-------------------------------------------------------------------------------------*/
 static void simple_driver_exit(void)
 {
     printk(KERN_NOTICE "VPMU: Exiting");
@@ -41,7 +51,7 @@ static void simple_driver_exit(void)
 #endif
     unregister_device();
 }
-/*===============================================================================================*/
+/*=====================================================================================*/
 
 module_init(simple_driver_init);
 module_exit(simple_driver_exit);

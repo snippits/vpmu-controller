@@ -11,10 +11,6 @@
 #include <linux/mutex.h>  /* mutex stuff */
 
 #include "../vpmu-device.h" /* VPMU Configurations */
-/* Maxumum length of a block that can be read or written in one operation */
-#ifndef VPMU_DEVICE_BLOCK_SIZE
-#define VPMU_DEVICE_BLOCK_SIZE 512
-#endif
 
 #define VPMU_CDEVICE_NAME "vpmu-device"
 
@@ -26,14 +22,9 @@
 struct vpmu_dev {
     unsigned char *data;
     unsigned long  buffer_size;
-    unsigned long  block_size;
-    struct mutex   cfake_mutex;
+    struct mutex   vpmu_mutex;
     struct cdev    cdev;
 };
-
-/* Sample String */
-static const char    g_s_Hello_World_string[] = "Hello world from VPMU!\n\0";
-static const ssize_t g_s_Hello_World_size     = sizeof(g_s_Hello_World_string);
 
 void *                  vpmu_base    = NULL;
 static struct vpmu_dev *vpmu_devices = NULL;
@@ -44,52 +35,144 @@ static int vpmu_ndevices     = 1;
 
 module_param(vpmu_ndevices, int, S_IRUGO);
 
-/*===============================================================================================*/
+void copy_from_vpmu(uintptr_t *buffer, uintptr_t addr_base, size_t count)
+{
+    uintptr_t i              = 0;
+    uintptr_t val            = 0;
+    uintptr_t count_in_words = 0;
+
+    count_in_words = count / sizeof(uintptr_t); // Bytes to size of pointers
+    // Read the data from VPMU word by word
+    for (i = 0; i < count_in_words; i++) {
+        VPMU_IO_READ(addr_base + i, val);
+        buffer[i] = val;
+    }
+}
+
+void copy_to_vpmu(uintptr_t addr_base, uintptr_t *buffer, size_t count)
+{
+    uintptr_t i              = 0;
+    uintptr_t count_in_words = 0;
+
+    count_in_words = count / sizeof(uintptr_t); // Bytes to size of pointers
+    // Read the data from VPMU word by word
+    for (i = 0; i < count_in_words; i++) {
+        VPMU_IO_WRITE(addr_base + i, buffer[i]);
+    }
+}
+
+/*=====================================================================================*/
 static ssize_t device_file_read(struct file *file_ptr,
                                 char __user *user_buffer,
                                 size_t       count,
                                 loff_t *     possition)
 {
-    printk(KERN_NOTICE "VPMU: Device file %s is read at offset = %i, read bytes count = %u",
-            file_ptr->f_path.dentry->d_parent->d_iname,
-           (int)*possition,
-           (unsigned int)count);
+    struct vpmu_dev *dev    = (struct vpmu_dev *)file_ptr->private_data;
+    int              retval = 0;
 
-    if (*possition >= g_s_Hello_World_size) return 0;
+    if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
 
-    if (*possition + count > g_s_Hello_World_size)
-        count = g_s_Hello_World_size - *possition;
-
-    if (copy_to_user(user_buffer, g_s_Hello_World_string + *possition, count) != 0)
-        return -EFAULT;
-
-    *possition += count;
-
-#ifndef DRY_RUN
-    // user_buffer[*possition] = ioread32(vpmu_base + *possition);
-#endif
-    return count;
-}
-
-static ssize_t device_file_write(struct file *file_ptr,
-                                 const char * user_buffer,
-                                 size_t       count,
-                                 loff_t *     possition)
-{
-    printk(KERN_NOTICE
-           "VPMU: Device file %s is write at offset = %i, write bytes count = %u",
+    printk(KERN_NOTICE "VPMU: Device file %s is read at "
+                       "offset = %i, read bytes count = %u",
            file_ptr->f_path.dentry->d_iname,
            (int)*possition,
            (unsigned int)count);
 
+    if (*possition >= dev->buffer_size) goto out; /* EOF */
+
+    if (*possition + count > dev->buffer_size) count = dev->buffer_size - *possition;
+
 #ifndef DRY_RUN
-    iowrite32(*possition, vpmu_base);
+    copy_from_vpmu((uintptr_t *)(dev->data + *possition), (uintptr_t)vpmu_base, count);
 #endif
+
+    if (copy_to_user(user_buffer, dev->data + *possition, count) != 0) {
+        retval = -EFAULT;
+        goto out;
+    }
+
+    *possition += count;
+    retval = count;
+
+out:
+    mutex_unlock(&dev->vpmu_mutex);
+    return retval;
+}
+
+static ssize_t device_file_write(struct file *      file_ptr,
+                                 const char __user *user_buffer,
+                                 size_t             count,
+                                 loff_t *           possition)
+{
+    struct vpmu_dev *dev    = (struct vpmu_dev *)file_ptr->private_data;
+    int              retval = 0;
+
+    if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
+
+    printk(KERN_NOTICE "VPMU: Device file %s is write at "
+                       "offset = %i, write bytes count = %u",
+           file_ptr->f_path.dentry->d_iname,
+           (int)*possition,
+           (unsigned int)count);
+
+    if (*possition >= dev->buffer_size) {
+        /* Writing beyond the end of the buffer is not allowed. */
+        retval = -EINVAL;
+        goto out;
+    }
+
+    if (*possition + count > dev->buffer_size) count = dev->buffer_size - *possition;
+
+    if (copy_from_user(dev->data + *possition, user_buffer, count) != 0) {
+        retval = -EFAULT;
+        goto out;
+    }
+
+    *possition += count;
+    retval = count;
+
+#ifndef DRY_RUN
+    copy_to_vpmu((uintptr_t)vpmu_base, (uintptr_t *)(dev->data + *possition), count);
+#endif
+
+out:
+    mutex_unlock(&dev->vpmu_mutex);
     return count;
 }
 
 static int device_file_open(struct inode *inode, struct file *file_ptr)
 {
+    unsigned int mj = imajor(inode);
+    unsigned int mn = iminor(inode);
+
+    struct vpmu_dev *dev = NULL;
+
+    if (mj != vpmu_major_number || mn < 0 || mn >= vpmu_ndevices) {
+        printk(KERN_WARNING "VPMU: "
+                            "No device found with minor=%d and major=%d\n",
+               mj,
+               mn);
+        return -ENODEV; /* No such device */
+    }
+
+    dev = &vpmu_devices[mn];
+    // store a pointer to struct vpmu_dev here for other methods
+    file_ptr->private_data = dev;
+
+    if (inode->i_cdev != &dev->cdev) {
+        printk(KERN_WARNING "VPMU: open() internal error\n");
+        return -ENODEV; /* No such device */
+    }
+
+    /* if opened the 1st time, allocate the buffer */
+    if (dev->data == NULL) {
+        dev->data = (unsigned char *)kzalloc(dev->buffer_size, GFP_KERNEL);
+        if (dev->data == NULL) {
+            printk(KERN_WARNING "VPMU: open() out of memory\n");
+            return -ENOMEM;
+        }
+    }
+
     printk(KERN_NOTICE "VPMU: Device %s Open", file_ptr->f_path.dentry->d_iname);
     return 0;
 }
@@ -100,7 +183,7 @@ static int device_file_release(struct inode *inode, struct file *file_ptr)
     return 0;
 }
 
-/*===============================================================================================*/
+/*=====================================================================================*/
 static struct file_operations simple_driver_fops = {.owner   = THIS_MODULE,
                                                     .read    = device_file_read,
                                                     .write   = device_file_write,
@@ -123,8 +206,7 @@ static int vpmu_construct_device(struct vpmu_dev *dev, int minor, struct class *
     /* Memory is to be allocated when the device is opened the first time */
     dev->data        = NULL;
     dev->buffer_size = VPMU_DEVICE_IOMEM_SIZE;
-    dev->block_size  = VPMU_DEVICE_BLOCK_SIZE;
-    mutex_init(&dev->cfake_mutex);
+    mutex_init(&dev->vpmu_mutex);
 
     cdev_init(&dev->cdev, &simple_driver_fops);
     dev->cdev.owner = THIS_MODULE;
@@ -157,7 +239,7 @@ static int vpmu_construct_device(struct vpmu_dev *dev, int minor, struct class *
     return 0;
 }
 
-/*===============================================================================================*/
+/*=====================================================================================*/
 static char *vpmu_devnode(struct device *dev, umode_t *mode)
 {
     if (!mode) return NULL;
@@ -177,7 +259,7 @@ int register_device(void)
     printk(KERN_NOTICE "VPMU: register_device() is called.");
 
     if (vpmu_ndevices <= 0) {
-        printk(KERN_WARNING "VPMU: Invalid value of cfake_ndevices: %d\n", vpmu_ndevices);
+        printk(KERN_WARNING "VPMU: Invalid value of vpmu_ndevices: %d\n", vpmu_ndevices);
         err = -EINVAL;
         return err;
     }
@@ -225,7 +307,7 @@ fail:
     vpmu_cleanup_module(devices_to_destroy);
     return 0;
 }
-/*-----------------------------------------------------------------------------------------------*/
+/*-------------------------------------------------------------------------------------*/
 void unregister_device(void)
 {
     printk(KERN_NOTICE "VPMU: unregister_device() is called");
@@ -239,7 +321,7 @@ static void vpmu_destroy_device(struct vpmu_dev *dev, int minor, struct class *c
     device_destroy(class, MKDEV(vpmu_major_number, minor));
     cdev_del(&dev->cdev);
     kfree(dev->data);
-    mutex_destroy(&dev->cfake_mutex);
+    mutex_destroy(&dev->vpmu_mutex);
     return;
 }
 
