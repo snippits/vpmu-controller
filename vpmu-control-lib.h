@@ -19,7 +19,7 @@ typedef VPMU_HANDLER *vpmu_handler_t;
 #define HW_W(ADDR, VAL) handler->ptr[ADDR / sizeof(uintptr_t)] = (uintptr_t)VAL
 #define HW_R(ADDR) (uintptr_t) handler->ptr[ADDR / sizeof(uintptr_t)]
 
-vpmu_handler_t vpmu_open(off_t vpmu_address);
+vpmu_handler_t vpmu_open(const char *dev_path, off_t address_offset);
 void vpmu_close(vpmu_handler_t handler);
 void vpmu_close(vpmu_handler_t handler);
 void vpmu_print_help_message(char *self);

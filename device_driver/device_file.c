@@ -10,6 +10,9 @@
 #include <linux/device.h> /* class_create(), device_create() */
 #include <linux/mutex.h>  /* mutex stuff */
 
+#include <linux/vmalloc.h>  /* vm_struct and vmalloc(), vmap() */
+#include <linux/mm.h>       /* vm_area_struct and remap_pfn_range() */
+
 #include "../vpmu-device.h" /* VPMU Configurations */
 
 #define VPMU_CDEVICE_NAME "vpmu-device"
@@ -44,7 +47,7 @@ void copy_from_vpmu(uintptr_t *buffer, uintptr_t addr_base, size_t count)
     count_in_words = count / sizeof(uintptr_t); // Bytes to size of pointers
     // Read the data from VPMU word by word
     for (i = 0; i < count_in_words; i++) {
-        VPMU_IO_READ(addr_base + i, val);
+        VPMU_IO_READ(addr_base + i * sizeof(uintptr_t), val);
         buffer[i] = val;
     }
 }
@@ -57,7 +60,7 @@ void copy_to_vpmu(uintptr_t addr_base, uintptr_t *buffer, size_t count)
     count_in_words = count / sizeof(uintptr_t); // Bytes to size of pointers
     // Read the data from VPMU word by word
     for (i = 0; i < count_in_words; i++) {
-        VPMU_IO_WRITE(addr_base + i, buffer[i]);
+        VPMU_IO_WRITE(addr_base + i * sizeof(uintptr_t), buffer[i]);
     }
 }
 
@@ -72,7 +75,7 @@ static ssize_t device_file_read(struct file *file_ptr,
 
     if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
 
-    printk(KERN_NOTICE "VPMU: Device file %s is read at "
+    printk(KERN_DEBUG "VPMU: Device file %s is read at "
                        "offset = %i, read bytes count = %u",
            file_ptr->f_path.dentry->d_iname,
            (int)*possition,
@@ -109,7 +112,7 @@ static ssize_t device_file_write(struct file *      file_ptr,
 
     if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
 
-    printk(KERN_NOTICE "VPMU: Device file %s is write at "
+    printk(KERN_DEBUG "VPMU: Device file %s is write at "
                        "offset = %i, write bytes count = %u",
            file_ptr->f_path.dentry->d_iname,
            (int)*possition,
@@ -147,9 +150,26 @@ static int device_file_open(struct inode *inode, struct file *file_ptr)
 
     struct vpmu_dev *dev = NULL;
 
+    if (mj == 0 || mn >= 256) { // Print meaningful messages to user about this bug
+        printk(
+          KERN_ERR
+          "VPMU: /dev is not mounted correctly. inode fails!!!!!!!!!\n"
+          "If you are using Buildroot, please make sure you've switched on:\n"
+          "System configuration  --->\n"
+          "    /dev management (Dynamic using devtmpfs only)  --->\n"
+          "Please refer to: "
+          "https://buildroot.org/downloads/manual/manual.html#_dev_management"
+          "\n\n"
+          "It could also be the problem of your Linux kernel\n"
+          "Please make sure the following two options is ON in your menuconfig\n"
+          "Device Drivers  --->\n"
+          "  Generic Driver Options  --->\n"
+          "    [*] Maintain a devtmpfs filesystem to mount at /dev\n"
+          "    [*]   Automount devtmpfs at /dev, after the kernel mounted the rootfs\n");
+    }
     if (mj != vpmu_major_number || mn < 0 || mn >= vpmu_ndevices) {
         printk(KERN_WARNING "VPMU: "
-                            "No device found with minor=%d and major=%d\n",
+                            "No device found with major=%d and minor=%d\n",
                mj,
                mn);
         return -ENODEV; /* No such device */
@@ -173,22 +193,50 @@ static int device_file_open(struct inode *inode, struct file *file_ptr)
         }
     }
 
-    printk(KERN_NOTICE "VPMU: Device %s Open", file_ptr->f_path.dentry->d_iname);
+    printk(KERN_DEBUG "VPMU: Device %s Open", file_ptr->f_path.dentry->d_iname);
     return 0;
 }
 
 static int device_file_release(struct inode *inode, struct file *file_ptr)
 {
-    printk(KERN_NOTICE "VPMU: Device Release");
+    printk(KERN_DEBUG "VPMU: Device Release");
     return 0;
 }
 
+static int device_file_mmap(struct file *file_ptr, struct vm_area_struct *vma)
+{
+    int retval = 0;
+
+    // Requesting more than what VPMU has, deny it
+    if (vma->vm_end - vma->vm_start > VPMU_DEVICE_IOMEM_SIZE) {
+        return -EIO;
+    }
+    // at offset 0 we map the VPMU_DEVICE_BASE_ADDR to user address
+    if (vma->vm_pgoff == 0) {
+        // If the address is virtual, use:
+        // virt_to_physical(buffer_pointer) >> PAGE_SHIFT
+        vma->vm_pgoff = (VPMU_DEVICE_BASE_ADDR) >> PAGE_SHIFT;
+        retval        = remap_pfn_range(vma,
+                                 vma->vm_start,
+                                 vma->vm_pgoff,
+                                 vma->vm_end - vma->vm_start,
+                                 vma->vm_page_prot);
+        if (retval != 0) return retval;
+
+        // This is for passing states of VPMU around
+        vma->vm_private_data = file_ptr->private_data;
+        return 0;
+    }
+    // at any other offset we return an error
+    return -EIO;
+}
 /*=====================================================================================*/
 static struct file_operations simple_driver_fops = {.owner   = THIS_MODULE,
                                                     .read    = device_file_read,
                                                     .write   = device_file_write,
                                                     .open    = device_file_open,
-                                                    .release = device_file_release};
+                                                    .release = device_file_release,
+                                                    .mmap    = device_file_mmap};
 
 /* ================================================================ */
 /* Setup and register the device with specific index (the index is also
@@ -256,7 +304,7 @@ int register_device(void)
     dev_t dev                = 0;
     int   devices_to_destroy = 0;
 
-    printk(KERN_NOTICE "VPMU: register_device() is called.");
+    printk(KERN_DEBUG "VPMU: register_device() is called.");
 
     if (vpmu_ndevices <= 0) {
         printk(KERN_WARNING "VPMU: Invalid value of vpmu_ndevices: %d\n", vpmu_ndevices);
@@ -272,7 +320,7 @@ int register_device(void)
     }
     vpmu_major_number = MAJOR(dev);
 
-    printk(KERN_NOTICE "VPMU: registered character device with major number = "
+    printk(KERN_DEBUG "VPMU: registered character device with major number = "
                        "%i and minor numbers 0...%d",
            vpmu_major_number,
            vpmu_ndevices);
@@ -295,7 +343,7 @@ int register_device(void)
 
     /* Construct devices */
     for (i = 0; i < vpmu_ndevices; ++i) {
-        err = vpmu_construct_device(&vpmu_devices[0], 0, vpmu_class);
+        err = vpmu_construct_device(&vpmu_devices[i], i, vpmu_class);
         if (err) {
             devices_to_destroy = i;
             goto fail;
@@ -310,7 +358,7 @@ fail:
 /*-------------------------------------------------------------------------------------*/
 void unregister_device(void)
 {
-    printk(KERN_NOTICE "VPMU: unregister_device() is called");
+    printk(KERN_DEBUG "VPMU: unregister_device() is called");
     vpmu_cleanup_module(vpmu_ndevices);
 }
 

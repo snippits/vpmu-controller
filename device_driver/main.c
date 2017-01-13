@@ -14,15 +14,15 @@ MODULE_AUTHOR("Medicine Yeh");
 static int simple_driver_init(void)
 {
     int result = 0;
-    printk(KERN_NOTICE "VPMU: Initialization started");
-    printk(KERN_NOTICE "VPMU: Offset of file.f_path.dentry(%lu), dentry.d_iname(%lu), "
+    printk(KERN_DEBUG "VPMU: Initialization started");
+    printk(KERN_DEBUG "VPMU: Offset of file.f_path.dentry(%lu), dentry.d_iname(%lu), "
                        "dentry.d_parent(%lu)\n",
            (unsigned long)offsetof(struct file, f_path)
              + (unsigned long)offsetof(struct path, dentry),
            (unsigned long)offsetof(struct dentry, d_iname),
            (unsigned long)offsetof(struct dentry, d_parent));
 
-    printk(KERN_NOTICE "VPMU: Offset of thread_info.task(%lu), task_struct.pid(%lu)\n",
+    printk(KERN_DEBUG "VPMU: Offset of thread_info.task(%lu), task_struct.pid(%lu)\n",
            (unsigned long)offsetof(struct thread_info, task),
            (unsigned long)offsetof(struct task_struct, pid));
 
@@ -45,7 +45,7 @@ static int simple_driver_init(void)
 /*-------------------------------------------------------------------------------------*/
 static void simple_driver_exit(void)
 {
-    printk(KERN_NOTICE "VPMU: Exiting");
+    printk(KERN_DEBUG "VPMU: Exiting");
 #ifndef DRY_RUN
     iounmap(vpmu_base);
 #endif

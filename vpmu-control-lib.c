@@ -21,20 +21,24 @@
 #define DRY_MSG(str, ...) {}
 #endif
 
-vpmu_handler_t vpmu_open(off_t vpmu_address)
+vpmu_handler_t vpmu_open(const char *dev_path, off_t address_offset)
 {
     vpmu_handler_t handler = (vpmu_handler_t)malloc(sizeof(VPMU_HANDLER));
 
 #ifdef DRY_RUN
     handler->ptr = (uintptr_t *)malloc(1024);
 #else
-    handler->fd = open("/dev/mem", O_RDWR | O_SYNC);
+    handler->fd = open(dev_path, O_RDWR | O_SYNC);
     if (handler->fd < 0) {
         printf("ERROR: Open Failed\n");
         exit(-1);
     }
-    handler->ptr = (uintptr_t *)mmap(
-      NULL, 1024, PROT_READ | PROT_WRITE, MAP_SHARED, handler->fd, vpmu_address);
+    handler->ptr = (uintptr_t *)mmap(NULL,
+                                     VPMU_DEVICE_IOMEM_SIZE,
+                                     PROT_READ | PROT_WRITE,
+                                     MAP_SHARED,
+                                     handler->fd,
+                                     address_offset);
     if (handler->ptr == MAP_FAILED) {
         printf("ERROR: Map Failed\n");
         exit(-1);
@@ -63,6 +67,8 @@ void vpmu_print_help_message(char *self)
 #define HELP_MESG                                                                        \
     "Usage: %s [options] {actions...}\n"                                                 \
     "Options:\n"                                                                         \
+    "  --mem         Use /dev/mem instead of /dev/vpmu-device-0 for communication\n"     \
+    ""                                                                                   \
     "  --jit         Enable just-in-time model selection on performance simulation\n"    \
     "  --trace       Enable VPMU event tracing and function tracking ability\n"          \
     "                If \"--trace\" is set, the process will be traced automatically\n"  \
@@ -245,14 +251,23 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 {
     vpmu_handler_t handler;
     int            i;
-    char *         buffer = NULL;
+    char *         buffer        = NULL;
+    char           dev_path[256] = "/dev/vpmu-device-0";
+    off_t          vpmu_offset   = 0;
 
     if (argc < 2) {
         vpmu_print_help_message(argv[0]);
         printf("Too less arguments\n");
         exit(-1);
     }
-    handler = vpmu_open(VPMU_DEVICE_BASE_ADDR);
+
+    for (i = 0; i < argc; i++) {
+        if (STR_IS(argv[i], "--mem")) {
+            strcpy(dev_path, "/dev/mem");
+            vpmu_offset = VPMU_DEVICE_BASE_ADDR;
+        }
+    }
+    handler = vpmu_open(dev_path, vpmu_offset);
 
     /* First Parse Settings/Configurations */
     for (i = 0; i < argc; i++) {
