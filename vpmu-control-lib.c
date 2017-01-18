@@ -265,6 +265,12 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
         if (STR_IS(argv[i], "--mem")) {
             strcpy(dev_path, "/dev/mem");
             vpmu_offset = VPMU_DEVICE_BASE_ADDR;
+        } else if (STR_IS(argv[i], "--help")) {
+            vpmu_print_help_message(argv[0]);
+            exit(0);
+        } else if (STR_IS(argv[i], "-h")) {
+            vpmu_print_help_message(argv[0]);
+            exit(0);
         }
     }
     handler = vpmu_open(dev_path, vpmu_offset);
@@ -290,12 +296,6 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
         } else if (STR_IS(argv[i], "--all_models")) {
             handler->flag_model |= VPMU_INSN_COUNT_SIM | VPMU_ICACHE_SIM | VPMU_DCACHE_SIM
                                    | VPMU_BRANCH_SIM | VPMU_PIPELINE_SIM;
-        } else if (STR_IS(argv[i], "--help")) {
-            vpmu_print_help_message(argv[0]);
-            exit(0);
-        } else if (STR_IS(argv[i], "-h")) {
-            vpmu_print_help_message(argv[0]);
-            exit(0);
         }
     }
 
