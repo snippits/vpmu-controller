@@ -90,8 +90,9 @@ void vpmu_print_help_message(char *self)
     "                If \"--trace\" is set, the controller will also pass some of the "  \
     "sections\n"                                                                         \
     "                (i.e. symbol table, dynamic libraries) of target binary to VPMU.\n" \
-    "\n"
-
+    "\n"                                                                                 \
+    "Example:\n"                                                                         \
+    "./vpmu-control-arm --all_models --start --exec \"ls -la\" --end\n"                  
     printf(HELP_MESG, self);
 }
 
