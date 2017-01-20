@@ -338,9 +338,15 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             }
 
             if (handler->flag_trace) {
-                char exec_name[256] = {0}, file_path[256] = {0}, args[256] = {0};
-                int  index = 0, index_path_end = 0;
-                int  j;
+                // Names and paths
+                char full_path[1024] = {0}, file_path[256] = {0};
+                char exec_name[256] = {0}, args[256] = {0};
+                // Indices
+                int index = 0, index_path_end = 0;
+                int j;
+                // Size
+                uintptr_t size = 0;
+
                 // Locate the last string in the path
                 for (j = 1; j < strlen(cmd); j++) {
                     if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
@@ -357,19 +363,20 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
                 strncpy(file_path, cmd, index_path_end);
                 strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
-
                 strncpy(exec_name, cmd + index, index_path_end - index);
-                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
-                HW_W(VPMU_MMAP_ADD_PROC_NAME, exec_name);
 
-                uintptr_t size = vpmu_read_file(file_path, &buffer);
+                // The full path might be set as a relative path
+                locate_binary(file_path, full_path);
+                size = vpmu_read_file(file_path, &buffer);
+
+                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
+                HW_W(VPMU_MMAP_ADD_PROC_NAME, full_path);
                 HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
                 HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
 
-                char full_path[1024] = {0};
-                locate_binary(file_path, full_path);
                 DRY_MSG("command          : %s\n", cmd);
                 DRY_MSG("binary path      : %s\n", full_path);
+                DRY_MSG("binary name      : %s\n", exec_name);
                 DRY_MSG("binary size      : %lu\n", size);
                 DRY_MSG("buffer pointer   : %p\n", buffer);
 #ifdef DRY_RUN
@@ -380,7 +387,7 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
                 vpmu_fork_exec(cmd);
 
-                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, exec_name);
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
                 HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
             } else {
                 vpmu_fork_exec(cmd);
