@@ -18,7 +18,9 @@
 #ifdef DRY_RUN
 #define DRY_MSG(str, ...) fprintf(stderr, "\033[1;32m" str "\033[0;00m", ##__VA_ARGS__)
 #else
-#define DRY_MSG(str, ...) {}
+#define DRY_MSG(str, ...)                                                                \
+    {                                                                                    \
+    }
 #endif
 
 vpmu_handler_t vpmu_open(const char *dev_path, off_t address_offset)
@@ -92,7 +94,8 @@ void vpmu_print_help_message(char *self)
     "                (i.e. symbol table, dynamic libraries) of target binary to VPMU.\n" \
     "\n"                                                                                 \
     "Example:\n"                                                                         \
-    "./vpmu-control-arm --all_models --start --exec \"ls -la\" --end\n"                  
+    "    ./vpmu-control-arm --all_models --start --exec \"ls -la\" --end\n"
+
     printf(HELP_MESG, self);
 }
 
@@ -127,8 +130,7 @@ static int locate_binary(char *path, char *out_path)
         return -1;
     if (strlen(full_path) == 0) {
         strcpy(out_path, path);
-    }
-    else {
+    } else {
         strcpy(out_path, full_path);
     }
     return 0;
@@ -194,11 +196,11 @@ static void trim(char *s)
 
 void vpmu_fork_exec(char *cmd)
 {
-    pid_t pid      = fork();
+    pid_t pid       = fork();
     char *args[128] = {NULL};
     int   i, idx = 0;
-    int   size = strlen(cmd);
-    int flag_string = 0;
+    int   size        = strlen(cmd);
+    int   flag_string = 0;
     char *pch;
 
     if (pid == -1) {
@@ -207,13 +209,12 @@ void vpmu_fork_exec(char *cmd)
         int status;
         waitpid(pid, &status, 0);
     } else {
-        printf("command: %s\n", cmd);
+        printf("Executing command: %s\n", cmd);
         // String tokenize
         for (i = 1; i < size; i++) {
             if (flag_string == 0 && (cmd[i] == '"' || cmd[i] == '\'')) {
                 flag_string = 1;
-            }
-            else if (flag_string == 1 && (cmd[i] == '"' || cmd[i] == '\'')) {
+            } else if (flag_string == 1 && (cmd[i] == '"' || cmd[i] == '\'')) {
                 flag_string = 0;
             }
             if (flag_string == 0 && cmd[i] == ' ' && cmd[i - 1] != '\\') {
@@ -238,8 +239,7 @@ void vpmu_fork_exec(char *cmd)
         }
 #ifdef DRY_RUN
         for (i = 0; i < 128; i++) {
-            if (strlen(args[i]) > 0)
-                printf("%s\n", args[i]);
+            if (strlen(args[i]) > 0) DRY_MSG("%s\n", args[i]);
         }
 #endif
         // we are the child
@@ -248,11 +248,106 @@ void vpmu_fork_exec(char *cmd)
     }
 }
 
+char *find_path(char *message)
+{
+    int   i      = 0;
+    int   offset = 0;
+    int   index  = 0;
+    char *pch    = strstr(message, "=>");
+
+    if (pch == NULL) {
+        // Not found in the path, it's just name
+        for (i = 0; message[i] != '\0'; i++) {
+            if (message[i] == '\\') continue;
+            if (index == 0 && message[i] != ' ') index = i;
+            if (index != 0 && message[i] == ' ') {
+                message[i] = '\0';
+                return &message[index];
+            }
+        }
+    } else {
+        // Found in the path
+        offset = (int)(pch - message) + strlen("=>");
+        for (i = offset; message[i] != '\0'; i++) {
+            if (message[i] == '\\') continue;
+            if (index == 0 && message[i] != ' ') index = i;
+            if (index != 0 && message[i] == ' ') {
+                message[i] = '\0';
+                return &message[index];
+            }
+        }
+    }
+    return NULL;
+}
+
+char **get_library_list(char *cmd)
+{
+    char   new_command[1024] = "LD_TRACE_LOADED_OBJECTS=1 ";
+    FILE * fp                = NULL;
+    size_t file_size         = 0;
+    char   message[1024]     = {0}; // No longer than 1024 characters per line
+    char **library_list      = NULL;
+    int    cnt               = 0;
+    int    size_of_list      = 128;
+
+    strcat(new_command, cmd);
+    fp = popen(new_command, "r");
+    if (fp == NULL) return NULL;
+    fseek(fp, 0, SEEK_END);
+    file_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    if (file_size == 0) return NULL;
+    library_list = (char **)malloc(sizeof(char *) * size_of_list);
+    DRY_MSG("Find shared libraries in this binary\n");
+    while (fgets(message, sizeof(message), fp) != NULL) {
+        library_list[cnt] = strdup(find_path(message));
+        if (library_list[cnt] != NULL) {
+            DRY_MSG("    %d) %s\n", cnt, library_list[cnt]);
+            cnt++;
+        }
+        if (cnt >= size_of_list) {
+            size_of_list *= 2;
+            library_list = (char **)realloc(library_list, sizeof(char *) * size_of_list);
+        }
+    }
+    library_list[cnt] = NULL; // Terminate the list
+    return library_list;
+}
+
+void release_library_list(char **library_list)
+{
+    int i = 0;
+    for (i = 0; library_list[i] != NULL; i++) free(library_list[i]);
+    free(library_list);
+}
+
+void load_and_send_to_vpmu(vpmu_handler_t handler, char *file_path)
+{
+    char   full_path[2048] = {0};
+    char * buffer          = NULL;
+    size_t size            = 0;
+
+    // The full path would be set as a relative path if it's not found
+    locate_binary(file_path, full_path);
+    size = vpmu_read_file(file_path, &buffer);
+    if (size == 0) return;
+
+    HW_W(VPMU_MMAP_ADD_PROC_NAME, full_path);
+    HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
+    HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
+
+    DRY_MSG("    send binary path      : %s\n", full_path);
+    DRY_MSG("    send binary size      : %lu\n", size);
+    DRY_MSG("    send buffer pointer   : %p\n", buffer);
+    DRY_MSG("\n");
+
+    if (buffer) free(buffer);
+}
+
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 {
     vpmu_handler_t handler;
     int            i;
-    char *         buffer        = NULL;
     char           dev_path[256] = "/dev/vpmu-device-0";
     off_t          vpmu_offset   = 0;
 
@@ -339,13 +434,13 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
             if (handler->flag_trace) {
                 // Names and paths
-                char full_path[1024] = {0}, file_path[256] = {0};
-                char exec_name[256] = {0}, args[256] = {0};
+                char full_path[2048] = {0}, file_path[1024] = {0};
+                char exec_name[512] = {0}, args[1024] = {0};
                 // Indices
                 int index = 0, index_path_end = 0;
                 int j;
-                // Size
-                uintptr_t size = 0;
+                // The pointer to a list of shared libraries
+                char **library_list = NULL;
 
                 // Locate the last string in the path
                 for (j = 1; j < strlen(cmd); j++) {
@@ -365,30 +460,32 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
                 strncpy(exec_name, cmd + index, index_path_end - index);
 
-                // The full path might be set as a relative path
+                // The full path would be set as a relative path if it's not found
                 locate_binary(file_path, full_path);
-                size = vpmu_read_file(file_path, &buffer);
-
-                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
-                HW_W(VPMU_MMAP_ADD_PROC_NAME, full_path);
-                HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
-                HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
 
                 DRY_MSG("command          : %s\n", cmd);
-                DRY_MSG("binary path      : %s\n", full_path);
                 DRY_MSG("binary name      : %s\n", exec_name);
-                DRY_MSG("binary size      : %lu\n", size);
-                DRY_MSG("buffer pointer   : %p\n", buffer);
-#ifdef DRY_RUN
-                //EFD *efd = efd_open_elf(full_path);
-                //dump_symbol_table(efd);
-                //efd_close(efd);
-#endif
+
+                library_list = get_library_list(cmd);
+                for (j = 0; library_list[j] != NULL; j++) {
+                    if (library_list[j][0] != '/' && library_list[j][0] != '.') {
+                        // Skip libraries that are still just a name (not found)
+                        continue;
+                    } else {
+                        load_and_send_to_vpmu(handler, library_list[j]);
+                    }
+                }
+
+                // Send the main program to VPMU (this must be the last one)
+                load_and_send_to_vpmu(handler, file_path);
+
+                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
                 vpmu_fork_exec(cmd);
 
                 HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
                 HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
+                release_library_list(library_list);
             } else {
                 vpmu_fork_exec(cmd);
             }
