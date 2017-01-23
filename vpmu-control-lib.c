@@ -74,6 +74,7 @@ void vpmu_print_help_message(char *self)
     "  --jit         Enable just-in-time model selection on performance simulation\n"    \
     "  --trace       Enable VPMU event tracing and function tracking ability\n"          \
     "                If \"--trace\" is set, the process will be traced automatically\n"  \
+    "  --phase       Enable VPMU phase detection, --trace will be forced to set\n"       \
     "  --[MODEL]     [MODEL] could be one of the following\n"                            \
     "                    inst, cache, branch, pipeline, all_models\n"                    \
     "  --help        Show this message\n"                                                \
@@ -381,6 +382,12 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             DRY_MSG("enable trace\n");
             handler->flag_trace = 1;
             handler->flag_model |= VPMU_EVENT_TRACE;
+        } else if (STR_IS(argv[i], "--phase")) {
+            DRY_MSG("enable phase\n");
+            DRY_MSG("enable trace\n");
+            handler->flag_trace = 1;
+            handler->flag_model |= VPMU_EVENT_TRACE;
+            handler->flag_model |= VPMU_PHASEDET;
         } else if (STR_IS(argv[i], "--inst")) {
             handler->flag_model |= VPMU_INSN_COUNT_SIM;
         } else if (STR_IS(argv[i], "--cache")) {
