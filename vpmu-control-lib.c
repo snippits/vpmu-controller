@@ -281,6 +281,46 @@ char *find_path(char *message)
     return NULL;
 }
 
+int is_dynamic_binary(char *cmd)
+{
+    FILE * fp         = fopen(cmd, "rb");
+    size_t lSize      = 0;
+    char * buffer     = NULL;
+    int    is_dynamic = 0;
+    int    i          = 0;
+
+    // obtain file size:
+    fseek(fp, 0, SEEK_END);
+    lSize = ftell(fp);
+    rewind(fp);
+
+    // allocate memory to contain the whole file
+    buffer = (char *)malloc(sizeof(char) * lSize);
+    if (buffer == NULL) {
+        fprintf(stderr, "Memory error");
+        exit(2);
+    }
+
+    fread(buffer, 1, lSize, fp);
+
+    for (i = 0; i < lSize - 6; i++) {
+        if (buffer[i] == 'G' // Compare to string GLIBC_
+            && buffer[i + 1] == 'L'
+            && buffer[i + 2] == 'I'
+            && buffer[i + 3] == 'B'
+            && buffer[i + 4] == 'C'
+            && buffer[i + 5] == '_') {
+            is_dynamic = 1;
+            break;
+        }
+    }
+
+    free(buffer);
+    fclose(fp);
+
+    return is_dynamic;
+}
+
 char **get_library_list(char *cmd)
 {
     char   new_command[1024] = "LD_TRACE_LOADED_OBJECTS=1 ";
@@ -473,13 +513,15 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 DRY_MSG("command          : %s\n", cmd);
                 DRY_MSG("binary name      : %s\n", exec_name);
 
-                library_list = get_library_list(cmd);
-                for (j = 0; library_list[j] != NULL; j++) {
-                    if (library_list[j][0] != '/' && library_list[j][0] != '.') {
-                        // Skip libraries that are still just a name (not found)
-                        continue;
-                    } else {
-                        load_and_send_to_vpmu(handler, library_list[j]);
+                if (!is_dynamic_binary(cmd)) {
+                    library_list = get_library_list(cmd);
+                    for (j = 0; library_list[j] != NULL; j++) {
+                        if (library_list[j][0] != '/' && library_list[j][0] != '.') {
+                            // Skip libraries that are still just a name (not found)
+                            continue;
+                        } else {
+                            load_and_send_to_vpmu(handler, library_list[j]);
+                        }
                     }
                 }
 
@@ -492,7 +534,7 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
                 HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
                 HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
-                release_library_list(library_list);
+                if (library_list != NULL) release_library_list(library_list);
             } else {
                 vpmu_fork_exec(cmd);
             }
