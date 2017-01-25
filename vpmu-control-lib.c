@@ -175,7 +175,7 @@ int vpmu_read_file(char *path, char **buffer)
     *buffer = NULL;
     *buffer = (char *)malloc(file_size);
     if (*buffer == NULL) {
-        printf("Fail to allocate memory\n");
+        printf("vpmu-control: Fail to allocate memory\n");
         exit(-1);
     }
     fread(*buffer, file_size, 1, fp);
@@ -205,12 +205,12 @@ void vpmu_fork_exec(char *cmd)
     char *pch;
 
     if (pid == -1) {
-        printf("error, failed to fork()");
+        printf("vpmu-control: error, failed to fork()");
     } else if (pid > 0) {
         int status;
         waitpid(pid, &status, 0);
     } else {
-        printf("Executing command: %s\n", cmd);
+        printf("vpmu-control: Executing command '%s'\n", cmd);
         // String tokenize
         for (i = 1; i < size; i++) {
             if (flag_string == 0 && (cmd[i] == '"' || cmd[i] == '\'')) {
@@ -281,14 +281,18 @@ char *find_path(char *message)
     return NULL;
 }
 
-int is_dynamic_binary(char *cmd)
+int is_dynamic_binary(char *file_path)
 {
-    FILE * fp         = fopen(cmd, "rb");
+    FILE * fp         = fopen(file_path, "rb");
     size_t lSize      = 0;
     char * buffer     = NULL;
     int    is_dynamic = 0;
     int    i          = 0;
 
+    if (fp == NULL) {
+        printf("vpmu-control: File '%s' not found\n", file_path);
+        exit(-1);
+    }
     // obtain file size:
     fseek(fp, 0, SEEK_END);
     lSize = ftell(fp);
@@ -394,7 +398,7 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
     if (argc < 2) {
         vpmu_print_help_message(argv[0]);
-        printf("Too less arguments\n");
+        printf("vpmu-control: Too less arguments\n");
         exit(-1);
     }
 
@@ -513,7 +517,7 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 DRY_MSG("command          : %s\n", cmd);
                 DRY_MSG("binary name      : %s\n", exec_name);
 
-                if (!is_dynamic_binary(cmd)) {
+                if (!is_dynamic_binary(full_path)) {
                     library_list = get_library_list(cmd);
                     for (j = 0; library_list[j] != NULL; j++) {
                         if (library_list[j][0] != '/' && library_list[j][0] != '.') {
