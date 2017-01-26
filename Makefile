@@ -1,4 +1,4 @@
-include path.mak
+-include path.mak
 CC=gcc
 ARM_CC=arm-linux-gnueabi-gcc
 ARM_LD=arm-linux-gnueabi-ld
