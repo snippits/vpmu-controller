@@ -1,6 +1,7 @@
 #ifndef DEVICE_FILE_H_
 #define DEVICE_FILE_H_
-#include <linux/compiler.h> // __must_check
+#include <linux/compiler.h>  // __must_check
+#include <asm/bitsperlong.h> // BITS_PER_LONG
 
 __must_check int register_device(void); /* 0 if Ok*/
 
@@ -38,7 +39,8 @@ void vpmu_cleanup_module(int devices_to_destroy);
 #define TARGET_WORD_SIZE 4
 // End of (BITS_PER_LONG == 32)
 #else
-#error message("BITS_PER_LONG is not defined")
+#error message("BITS_PER_LONG is not defined"
+               "  You may define it in this header if you need to.")
 #endif
 
 extern void *vpmu_base;

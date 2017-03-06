@@ -17,13 +17,14 @@ MODULE_AUTHOR("Medicine Yeh");
 #define SET_ARG(_OFFSET, _VAL)                                                           \
     VPMU_IO_WRITE(vpmu_base + VPMU_MMAP_OFFSET_##_OFFSET, (_VAL));
 
-void pass_kernel_symbol(const char *name)
+int pass_kernel_symbol(const char *name)
 {
     unsigned long ret;
 
     ret = kallsyms_lookup_name(name);
     if (ret == 0) {
-        printk(KERN_ALERT "VPMU: Symbol %s is not found", name);
+        printk(KERN_DEBUG "VPMU: Symbol %s is not found", name);
+        return 0;
     } else {
         printk(KERN_DEBUG "VPMU: Symbol %s : %lx", name, ret);
 #ifndef DRY_RUN
@@ -31,6 +32,8 @@ void pass_kernel_symbol(const char *name)
         SET_ARG(KERNEL_SYM_ADDR, ret);
 #endif
     }
+
+    return 1;
 }
 
 /*=====================================================================================*/
@@ -61,7 +64,7 @@ static int simple_driver_init(void)
     SET_ARG(TASK_STRUCT_pid, (unsigned long)offsetof(struct task_struct, pid));
 #endif
     pass_kernel_symbol("mmap_region");
-    pass_kernel_symbol("_do_fork");
+    if (!pass_kernel_symbol("_do_fork")) pass_kernel_symbol("do_fork");
     pass_kernel_symbol("wake_up_new_task");
     pass_kernel_symbol("do_exit");
     pass_kernel_symbol("__switch_to");
