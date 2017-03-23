@@ -5,7 +5,7 @@ options=""
 function print_help()
 {
     echo "$0 [OPTIONS, ...] command [command args...]"
-    echo "    OPTIONS: --trace, --jit"
+    echo "    OPTIONS: --monitor, --phase, --trace, --jit"
 }
 
 function encapsulate()
@@ -27,6 +27,12 @@ function encapsulate()
 options=""
 while [[ 1 ]]; do
     case "$1" in
+        "--monitor" )
+            options+="--monitor "
+            ;;
+        "--phase" )
+            options+="--phase "
+            ;;
         "--trace" )
             options+="--trace "
             ;;
