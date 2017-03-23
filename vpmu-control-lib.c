@@ -541,12 +541,12 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
                 if (handler->flag_monitor) {
                     printf("Monitoring: %s\n", cmd);
+                    printf("Please use controller to print report when need\n");
                 } else {
                     vpmu_fork_exec(cmd);
                     HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+                    HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
                 }
-
-                HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
                 if (library_list != NULL) release_library_list(library_list);
             } else {
                 vpmu_fork_exec(cmd);
