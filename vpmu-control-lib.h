@@ -8,7 +8,7 @@ typedef struct VPMU_HANDLER {
     int        fd;
     uintptr_t *ptr;
     int32_t    flag_model;
-    uint32_t   flag_jit, flag_trace;
+    uint32_t   flag_jit, flag_trace, flag_monitor;
 } VPMU_HANDLER;
 typedef VPMU_HANDLER *vpmu_handler_t;
 

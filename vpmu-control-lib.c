@@ -426,6 +426,11 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             DRY_MSG("enable trace\n");
             handler->flag_trace = 1;
             handler->flag_model |= VPMU_EVENT_TRACE;
+        } else if (STR_IS(argv[i], "--monitor")) {
+            DRY_MSG("enable monitoring\n");
+            handler->flag_monitor = 1;
+            handler->flag_trace   = 1;
+            handler->flag_model |= VPMU_EVENT_TRACE;
         } else if (STR_IS(argv[i], "--phase")) {
             DRY_MSG("enable phase\n");
             DRY_MSG("enable trace\n");
@@ -534,9 +539,13 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
                 HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
-                vpmu_fork_exec(cmd);
+                if (handler->flag_monitor) {
+                    printf("Monitoring: %s\n", cmd);
+                } else {
+                    vpmu_fork_exec(cmd);
+                    HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+                }
 
-                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
                 HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
                 if (library_list != NULL) release_library_list(library_list);
             } else {

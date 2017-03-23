@@ -20,7 +20,7 @@ else
 	BUILDSYSTEM_DIR?=/lib/modules/$(shell uname -r)/build
 	PWD:=$(shell pwd)
 
-all : 
+all:
 # run kernel build system to make module
 	@$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) modules
 
@@ -33,6 +33,10 @@ load:
 
 unload:
 	rmmod ./$(TARGET_MODULE).ko
+
+install:
+# run kernel build system to install module
+	@$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) modules_install
 
 endif
 
