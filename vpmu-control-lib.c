@@ -77,6 +77,8 @@ void vpmu_print_help_message(char *self)
     "  --phase       Enable VPMU phase detection, --trace will be forced to set\n"       \
     "  --[MODEL]     [MODEL] could be one of the following\n"                            \
     "                    inst, cache, branch, pipeline, all_models\n"                    \
+    "  --monitor     Enable VPMU event tracing and set the binary without\n"             \
+    "                executing them when using -e action\n"                              \
     "  --help        Show this message\n"                                                \
     "\n\n"                                                                               \
     "Actions:\n"                                                                         \
