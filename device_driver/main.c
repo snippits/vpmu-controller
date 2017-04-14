@@ -68,7 +68,7 @@ static int simple_driver_init(void)
     pass_kernel_symbol("wake_up_new_task");
     pass_kernel_symbol("do_exit");
     pass_kernel_symbol("__switch_to");
-    pass_kernel_symbol("do_execve");
+    pass_kernel_symbol("do_execveat_common.isra.40");
 
     result = register_device();
     return result;
