@@ -18,7 +18,7 @@ MODULE_AUTHOR("Medicine Yeh");
  * here if necessary.
  */
 #ifndef KERNEL_VERSION
-#define KERNEL_VERSION(a, b, c) ((a) << 16 + (b) << 8 + (c))
+#define KERNEL_VERSION(a, b, c) ((a << 16) + (b << 8) + (c))
 #endif
 
 /* Lookup the address for this symbol. Returns 0 if not found. */
