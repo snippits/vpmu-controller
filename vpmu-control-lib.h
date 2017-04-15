@@ -8,7 +8,7 @@ typedef struct VPMU_HANDLER {
     int        fd;
     uintptr_t *ptr;
     int32_t    flag_model;
-    uint32_t   flag_jit, flag_trace, flag_monitor;
+    uint32_t   flag_jit, flag_trace, flag_monitor, flag_remove;
 } VPMU_HANDLER;
 typedef VPMU_HANDLER *vpmu_handler_t;
 
@@ -22,9 +22,17 @@ typedef VPMU_HANDLER *vpmu_handler_t;
 vpmu_handler_t vpmu_open(const char *dev_path, off_t address_offset);
 void vpmu_close(vpmu_handler_t handler);
 void vpmu_close(vpmu_handler_t handler);
-void vpmu_print_help_message(char *self);
+void vpmu_print_help_message(const char *self);
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv);
-int vpmu_read_file(char *path, char **buffer);
-void vpmu_fork_exec(char *cmd);
+int vpmu_read_file(const char *path, char **buffer);
+void vpmu_fork_exec(const char *cmd);
+
+int is_dynamic_binary(char *file_path);
+char **get_library_list(const char *cmd);
+void release_library_list(char **library_list);
+void vpmu_load_and_send(vpmu_handler_t handler, const char *file_path);
+void vpmu_load_and_send_all(vpmu_handler_t handler, const char *cmd);
+
+void parse_all_paths(const char *cmd, char *full_path, char *file_path);
 
 #endif

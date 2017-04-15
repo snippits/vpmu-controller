@@ -64,7 +64,7 @@ void vpmu_close(vpmu_handler_t handler)
     free(handler);
 }
 
-void vpmu_print_help_message(char *self)
+void vpmu_print_help_message(const char *self)
 {
 #define HELP_MESG                                                                        \
     "Usage: %s [options] {actions...}\n"                                                 \
@@ -79,6 +79,7 @@ void vpmu_print_help_message(char *self)
     "                    inst, cache, branch, pipeline, all_models\n"                    \
     "  --monitor     Enable VPMU event tracing and set the binary without\n"             \
     "                executing them when using -e action\n"                              \
+    "  --remove      Remove binary (specified by -e option) from monitoring list\n"      \
     "  --help        Show this message\n"                                                \
     "\n\n"                                                                               \
     "Actions:\n"                                                                         \
@@ -102,7 +103,7 @@ void vpmu_print_help_message(char *self)
     printf(HELP_MESG, self);
 }
 
-static int locate_binary(char *path, char *out_path)
+static int locate_binary(const char *path, char *out_path)
 {
     FILE *fp       = NULL;
     char *sys_path = strdup(getenv("PATH"));
@@ -139,7 +140,7 @@ static int locate_binary(char *path, char *out_path)
     return 0;
 }
 
-int vpmu_read_file(char *path, char **buffer)
+int vpmu_read_file(const char *path, char **buffer)
 {
     FILE *fp = NULL;
     int   file_size;
@@ -197,15 +198,17 @@ static void trim(char *s)
     memmove(s, p, l + 1);
 }
 
-void vpmu_fork_exec(char *cmd)
+void vpmu_fork_exec(const char *input_cmd)
 {
     pid_t pid       = fork();
-    char *args[128] = {NULL};
+    char *args[128] = {};
     int   i, idx = 0;
+    char  cmd[1024]   = {};
     int   size        = strlen(cmd);
     int   flag_string = 0;
     char *pch;
 
+    strncpy(cmd, input_cmd, 1024);
     if (pid == -1) {
         printf("vpmu-control: error, failed to fork()");
     } else if (pid > 0) {
@@ -251,7 +254,7 @@ void vpmu_fork_exec(char *cmd)
     }
 }
 
-char *find_path(char *message)
+static char *find_path(char *message)
 {
     int   i      = 0;
     int   offset = 0;
@@ -327,7 +330,7 @@ int is_dynamic_binary(char *file_path)
     return is_dynamic;
 }
 
-char **get_library_list(char *cmd)
+char **get_library_list(const char *cmd)
 {
     char   new_command[1024] = "LD_TRACE_LOADED_OBJECTS=1 ";
     FILE * fp                = NULL;
@@ -364,11 +367,13 @@ char **get_library_list(char *cmd)
 void release_library_list(char **library_list)
 {
     int i = 0;
+
+    if (library_list == NULL) return;
     for (i = 0; library_list[i] != NULL; i++) free(library_list[i]);
     free(library_list);
 }
 
-void load_and_send_to_vpmu(vpmu_handler_t handler, char *file_path)
+void vpmu_load_and_send(vpmu_handler_t handler, const char *file_path)
 {
     char   full_path[2048] = {0};
     char * buffer          = NULL;
@@ -389,6 +394,58 @@ void load_and_send_to_vpmu(vpmu_handler_t handler, char *file_path)
     DRY_MSG("\n");
 
     if (buffer) free(buffer);
+}
+
+void vpmu_load_and_send_all(vpmu_handler_t handler, const char *cmd)
+{
+    int    j;
+    char **library_list = NULL;
+
+    library_list = get_library_list(cmd);
+
+    for (j = 0; library_list[j] != NULL; j++) {
+        if (library_list[j][0] != '/' && library_list[j][0] != '.') {
+            // Skip libraries that are still just a name (not found)
+            continue;
+        } else {
+            vpmu_load_and_send(handler, library_list[j]);
+        }
+    }
+
+    release_library_list(library_list);
+}
+
+// "cmd" is an input argument, others are output arguments
+void parse_all_paths(const char *cmd, char *full_path, char *file_path)
+{
+    char exec_name[512] = {0}, args[1024] = {0};
+    // Indices
+    int index = 0, index_path_end = 0;
+    int j;
+
+    // Locate the last string in the path
+    for (j = 1; j < strlen(cmd); j++) {
+        if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
+            break;
+        }
+        if (cmd[j] == '/' && cmd[j - 1] != '\\') {
+            index = j + 1;
+        }
+    }
+    // Find the end of the path
+    for (j = index; j < strlen(cmd) && cmd[j] != ' '; j++)
+        ;
+    index_path_end = j;
+
+    strncpy(file_path, cmd, index_path_end);
+    strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
+    strncpy(exec_name, cmd + index, index_path_end - index);
+
+    // The full path would be set as a relative path if it's not found
+    locate_binary(file_path, full_path);
+
+    DRY_MSG("command          : %s\n", cmd);
+    DRY_MSG("binary name      : %s\n", exec_name);
 }
 
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
@@ -433,6 +490,9 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             handler->flag_monitor = 1;
             handler->flag_trace   = 1;
             handler->flag_model |= VPMU_EVENT_TRACE;
+        } else if (STR_IS(argv[i], "--remove")) {
+            DRY_MSG("enable monitoring\n");
+            handler->flag_remove = 1;
         } else if (STR_IS(argv[i], "--phase")) {
             DRY_MSG("enable phase\n");
             DRY_MSG("enable trace\n");
@@ -482,6 +542,8 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             DRY_MSG("--report\n");
             HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
         } else if (STR_IS_2(argv[i], "--exec", "-e")) {
+            // Names and paths
+            char  full_path[2048] = {0}, file_path[1024] = {0};
             char *cmd = strdup(argv[++i]);
             trim(cmd);
             // Dealing with escape space at the end of command
@@ -490,66 +552,37 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 cmd[strlen(cmd) + 1] = '\0';
             }
 
-            if (handler->flag_trace) {
-                // Names and paths
-                char full_path[2048] = {0}, file_path[1024] = {0};
-                char exec_name[512] = {0}, args[1024] = {0};
-                // Indices
-                int index = 0, index_path_end = 0;
-                int j;
-                // The pointer to a list of shared libraries
-                char **library_list = NULL;
+            parse_all_paths(cmd, full_path, file_path);
 
-                // Locate the last string in the path
-                for (j = 1; j < strlen(cmd); j++) {
-                    if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
-                        break;
-                    }
-                    if (cmd[j] == '/' && cmd[j - 1] != '\\') {
-                        index = j + 1;
-                    }
-                }
-                // Find the end of the path
-                for (j = index; j < strlen(cmd) && cmd[j] != ' '; j++)
-                    ;
-                index_path_end = j;
-
-                strncpy(file_path, cmd, index_path_end);
-                strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
-                strncpy(exec_name, cmd + index, index_path_end - index);
-
-                // The full path would be set as a relative path if it's not found
-                locate_binary(file_path, full_path);
-
-                DRY_MSG("command          : %s\n", cmd);
-                DRY_MSG("binary name      : %s\n", exec_name);
-
+            if (handler->flag_monitor) {
+                // Send the libraries to VPMU
                 if (!is_dynamic_binary(full_path)) {
-                    library_list = get_library_list(cmd);
-                    for (j = 0; library_list[j] != NULL; j++) {
-                        if (library_list[j][0] != '/' && library_list[j][0] != '.') {
-                            // Skip libraries that are still just a name (not found)
-                            continue;
-                        } else {
-                            load_and_send_to_vpmu(handler, library_list[j]);
-                        }
-                    }
+                    vpmu_load_and_send_all(handler, cmd);
                 }
-
                 // Send the main program to VPMU (this must be the last one)
-                load_and_send_to_vpmu(handler, file_path);
+                vpmu_load_and_send(handler, file_path);
+                HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
+                HW_W(VPMU_MMAP_RESET, ANY_VALUE);
+
+                printf("Monitoring: %s\n", cmd);
+                printf("Please use controller to print report when need\n");
+
+            } else if (handler->flag_remove) {
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+            } else if (handler->flag_trace) {
+                // Send the libraries to VPMU
+                if (!is_dynamic_binary(full_path)) {
+                    vpmu_load_and_send_all(handler, cmd);
+                }
+                // Send the main program to VPMU (this must be the last one)
+                vpmu_load_and_send(handler, file_path);
 
                 HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
-                if (handler->flag_monitor) {
-                    printf("Monitoring: %s\n", cmd);
-                    printf("Please use controller to print report when need\n");
-                } else {
-                    vpmu_fork_exec(cmd);
-                    HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
-                    HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
-                }
-                if (library_list != NULL) release_library_list(library_list);
+
+                vpmu_fork_exec(cmd);
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+                HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
             } else {
                 vpmu_fork_exec(cmd);
             }
