@@ -24,8 +24,9 @@
 #define VPMU_MMAP_OFFSET_THREAD_INFO_task        0x0118
 #define VPMU_MMAP_OFFSET_TASK_STRUCT_pid         0x0120
 // ... reserved
-#define VPMU_MMAP_OFFSET_KERNEL_SYM_NAME         0x0200
-#define VPMU_MMAP_OFFSET_KERNEL_SYM_ADDR         0x0208
+#define VPMU_MMAP_OFFSET_LINUX_VERSION           0x0200
+#define VPMU_MMAP_OFFSET_KERNEL_SYM_NAME         0x0208
+#define VPMU_MMAP_OFFSET_KERNEL_SYM_ADDR         0x0210
 
 // Mode selector
 #define VPMU_INSN_COUNT_SIM         0x1 << 0
@@ -37,6 +38,7 @@
 #define VPMU_EVENT_TRACE            0x1 << 6
 #define VPMU_WHOLE_SYSTEM           0x1 << 7
 #define VPMU_PHASEDET               0x1 << 8
+#define VPMU_VMS_SIM                0x1 << 9
 
 #define vpmu_model_has(model, vpmu) (vpmu.timing_model & (model))
 

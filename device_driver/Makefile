@@ -34,6 +34,11 @@ load:
 unload:
 	rmmod ./$(TARGET_MODULE).ko
 
+host_test:	all
+	sudo insmod ./$(TARGET_MODULE)-x86.ko
+	sudo rmmod ./$(TARGET_MODULE)-x86.ko
+	dmesg
+
 install:
 # run kernel build system to install module
 	@$(MAKE) -C $(BUILDSYSTEM_DIR) M=$(PWD) modules_install
