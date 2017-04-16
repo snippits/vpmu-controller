@@ -10,8 +10,8 @@
 #include <linux/device.h> /* class_create(), device_create() */
 #include <linux/mutex.h>  /* mutex stuff */
 
-#include <linux/vmalloc.h>  /* vm_struct and vmalloc(), vmap() */
-#include <linux/mm.h>       /* vm_area_struct and remap_pfn_range() */
+#include <linux/vmalloc.h> /* vm_struct and vmalloc(), vmap() */
+#include <linux/mm.h>      /* vm_area_struct and remap_pfn_range() */
 
 #include "../vpmu-device.h" /* VPMU Configurations */
 
@@ -76,7 +76,7 @@ static ssize_t device_file_read(struct file *file_ptr,
     if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
 
     printk(KERN_DEBUG "VPMU: Device file %s is read at "
-                       "offset = %i, read bytes count = %u",
+                      "offset = %i, read bytes count = %u\n",
            file_ptr->f_path.dentry->d_iname,
            (int)*possition,
            (unsigned int)count);
@@ -102,7 +102,7 @@ out:
     return retval;
 }
 
-static ssize_t device_file_write(struct file *      file_ptr,
+static ssize_t device_file_write(struct file *file_ptr,
                                  const char __user *user_buffer,
                                  size_t             count,
                                  loff_t *           possition)
@@ -113,7 +113,7 @@ static ssize_t device_file_write(struct file *      file_ptr,
     if (mutex_lock_killable(&dev->vpmu_mutex)) return -EINTR;
 
     printk(KERN_DEBUG "VPMU: Device file %s is write at "
-                       "offset = %i, write bytes count = %u",
+                      "offset = %i, write bytes count = %u\n",
            file_ptr->f_path.dentry->d_iname,
            (int)*possition,
            (unsigned int)count);
@@ -193,13 +193,13 @@ static int device_file_open(struct inode *inode, struct file *file_ptr)
         }
     }
 
-    printk(KERN_DEBUG "VPMU: Device %s Open", file_ptr->f_path.dentry->d_iname);
+    printk(KERN_DEBUG "VPMU: Device %s Open\n", file_ptr->f_path.dentry->d_iname);
     return 0;
 }
 
 static int device_file_release(struct inode *inode, struct file *file_ptr)
 {
-    printk(KERN_DEBUG "VPMU: Device Release");
+    printk(KERN_DEBUG "VPMU: Device Release\n");
     return 0;
 }
 
@@ -261,7 +261,7 @@ static int vpmu_construct_device(struct vpmu_dev *dev, int minor, struct class *
 
     err = cdev_add(&dev->cdev, devno, 1);
     if (err) {
-        printk(KERN_WARNING "VPMU: Error %d while trying to add %s%d",
+        printk(KERN_WARNING "VPMU: Error %d while trying to add %s%d\n",
                err,
                VPMU_CDEVICE_NAME,
                minor);
@@ -277,7 +277,7 @@ static int vpmu_construct_device(struct vpmu_dev *dev, int minor, struct class *
 
     if (IS_ERR(device)) {
         err = PTR_ERR(device);
-        printk(KERN_WARNING "VPMU: Error %d while trying to create %s-%d",
+        printk(KERN_WARNING "VPMU: Error %d while trying to create %s-%d\n",
                err,
                VPMU_CDEVICE_NAME,
                minor);
@@ -304,7 +304,7 @@ int register_device(void)
     dev_t dev                = 0;
     int   devices_to_destroy = 0;
 
-    printk(KERN_DEBUG "VPMU: register_device() is called.");
+    printk(KERN_DEBUG "VPMU: register_device() is called.\n");
 
     if (vpmu_ndevices <= 0) {
         printk(KERN_WARNING "VPMU: Invalid value of vpmu_ndevices: %d\n", vpmu_ndevices);
@@ -321,7 +321,7 @@ int register_device(void)
     vpmu_major_number = MAJOR(dev);
 
     printk(KERN_DEBUG "VPMU: registered character device with major number = "
-                       "%i and minor numbers 0...%d",
+                      "%i and minor numbers 0...%d\n",
            vpmu_major_number,
            vpmu_ndevices);
 
@@ -358,7 +358,7 @@ fail:
 /*-------------------------------------------------------------------------------------*/
 void unregister_device(void)
 {
-    printk(KERN_DEBUG "VPMU: unregister_device() is called");
+    printk(KERN_DEBUG "VPMU: unregister_device() is called\n");
     vpmu_cleanup_module(vpmu_ndevices);
 }
 

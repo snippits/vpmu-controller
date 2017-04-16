@@ -33,7 +33,7 @@ static int start_with(const char *str, const char *prefix)
 
 static int find_fn(void *data, const char *name, struct module *mod, unsigned long addr)
 {
-    // printk(KERN_DEBUG "%s", name);
+    // printk(KERN_DEBUG "%s\n", name);
     if (name != NULL && start_with(name, "do_execveat_common")) {
         *(unsigned long *)data = addr;
         return 1;
@@ -48,10 +48,10 @@ int pass_kernel_symbol(const char *name)
 
     ret = kallsyms_lookup_name(name);
     if (ret == 0) {
-        printk(KERN_DEBUG "VPMU: Symbol %s is not found", name);
+        printk(KERN_DEBUG "VPMU: Symbol %s is not found\n", name);
         return 0;
     } else {
-        printk(KERN_DEBUG "VPMU: Symbol %s : %lx", name, ret);
+        printk(KERN_DEBUG "VPMU: Symbol %s : %lx\n", name, ret);
 #ifndef DRY_RUN
         SET_ARG(KERNEL_SYM_NAME, name);
         SET_ARG(KERNEL_SYM_ADDR, ret);
@@ -67,10 +67,10 @@ int pass_kernel_symbol_prefix(const char *prefix_name)
 
     kallsyms_on_each_symbol(find_fn, &ret);
     if (ret == 0) {
-        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s is not found", prefix_name);
+        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s is not found\n", prefix_name);
         return 0;
     } else {
-        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s : %lx", prefix_name, ret);
+        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s : %lx\n", prefix_name, ret);
 #ifndef DRY_RUN
         SET_ARG(KERNEL_SYM_NAME, prefix_name);
         SET_ARG(KERNEL_SYM_ADDR, ret);
@@ -92,9 +92,9 @@ static int simple_driver_init(void)
     // A temporary variable for storing results (return values)
     int result = 0;
 
-    printk(KERN_DEBUG "VPMU: Initialization started");
+    printk(KERN_DEBUG "VPMU: Initialization started\n");
 
-    printk(KERN_DEBUG "VPMU: Running on Linux version %d:%d:%d",
+    printk(KERN_DEBUG "VPMU: Running on Linux version %u:%u:%u\n",
            (LINUX_VERSION_CODE >> 16) & 0xff,
            (LINUX_VERSION_CODE >> 8) & 0xff,
            (LINUX_VERSION_CODE >> 0) & 0xff);
@@ -162,7 +162,7 @@ static int simple_driver_init(void)
 /*-------------------------------------------------------------------------------------*/
 static void simple_driver_exit(void)
 {
-    printk(KERN_DEBUG "VPMU: Exiting");
+    printk(KERN_DEBUG "VPMU: Exiting\n");
 #ifndef DRY_RUN
     iounmap(vpmu_base);
 #endif
