@@ -9,6 +9,8 @@
 #include <linux/slab.h>   /* kzalloc() */
 #include <linux/device.h> /* class_create(), device_create() */
 #include <linux/mutex.h>  /* mutex stuff */
+#include <linux/sched.h>  /* struct task_struct */
+#include <asm/current.h>  /* "current" process (per-core variable)*/
 
 #include <linux/vmalloc.h> /* vm_struct and vmalloc(), vmap() */
 #include <linux/mm.h>      /* vm_area_struct and remap_pfn_range() */
@@ -194,6 +196,10 @@ static int device_file_open(struct inode *inode, struct file *file_ptr)
     }
 
     printk(KERN_DEBUG "VPMU: Device %s Open\n", file_ptr->f_path.dentry->d_iname);
+    printk(KERN_DEBUG "VPMU: Opened by the process \"%s\" (pid %d) on core %d\n",
+           current->comm,
+           current->pid,
+           current->wake_cpu);
     return 0;
 }
 

@@ -146,6 +146,7 @@ static int simple_driver_init(void)
     SET_ARG(TASK_STRUCT_pid, offset_pid);
 
     SET_ARG(LINUX_VERSION, (unsigned long)LINUX_VERSION_CODE);
+    VPMU_IO_WRITE(vpmu_base + VPMU_MMAP_THREAD_SIZE, (THREAD_SIZE));
 #endif
 
     // Pass kernel symbol address information to VPMU
