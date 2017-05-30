@@ -31,11 +31,20 @@ static int start_with(const char *str, const char *prefix)
     return (strncmp(str, prefix, strlen(prefix)) == 0);
 }
 
+typedef struct KallsymsData {
+    unsigned long addr;
+    const char *  prefix_name;
+    const char *  name;
+} KallsymsData;
+
 static int find_fn(void *data, const char *name, struct module *mod, unsigned long addr)
 {
+    KallsymsData *ptr = (KallsymsData *)data;
+
     // printk(KERN_DEBUG "%s\n", name);
-    if (name != NULL && start_with(name, "do_execveat_common")) {
-        *(unsigned long *)data = addr;
+    if (name != NULL && start_with(name, ptr->prefix_name)) {
+        ptr->addr = addr;
+        ptr->name = name;
         return 1;
     }
 
@@ -63,17 +72,18 @@ int pass_kernel_symbol(const char *name)
 
 int pass_kernel_symbol_prefix(const char *prefix_name)
 {
-    unsigned long ret = 0;
+    KallsymsData ret = {};
+    ret.prefix_name  = prefix_name;
 
-    kallsyms_on_each_symbol(find_fn, &ret);
-    if (ret == 0) {
+    kallsyms_on_each_symbol(find_fn, (void *)&ret);
+    if (ret.addr == 0) {
         printk(KERN_DEBUG "VPMU: Symbol (prefix) %s is not found\n", prefix_name);
         return 0;
     } else {
-        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s : %lx\n", prefix_name, ret);
+        printk(KERN_DEBUG "VPMU: Symbol (prefix) %s : %lx\n", prefix_name, ret.addr);
 #ifndef DRY_RUN
         SET_ARG(KERNEL_SYM_NAME, prefix_name);
-        SET_ARG(KERNEL_SYM_ADDR, ret);
+        SET_ARG(KERNEL_SYM_ADDR, ret.addr);
 #endif
     }
 
@@ -155,7 +165,9 @@ static int simple_driver_init(void)
     pass_kernel_symbol("wake_up_new_task");
     pass_kernel_symbol("do_exit");
     pass_kernel_symbol("__switch_to");
-    pass_kernel_symbol_prefix("do_execveat_common");
+    if (!pass_kernel_symbol_prefix("do_execveat_common")) {
+        pass_kernel_symbol_prefix("do_execve_common");
+    }
 
     result = register_device();
     return result;

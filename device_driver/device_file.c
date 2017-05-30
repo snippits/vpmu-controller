@@ -11,11 +11,20 @@
 #include <linux/mutex.h>  /* mutex stuff */
 #include <linux/sched.h>  /* struct task_struct */
 #include <asm/current.h>  /* "current" process (per-core variable)*/
+#include <linux/version.h>
 
 #include <linux/vmalloc.h> /* vm_struct and vmalloc(), vmap() */
 #include <linux/mm.h>      /* vm_area_struct and remap_pfn_range() */
 
 #include "../vpmu-device.h" /* VPMU Configurations */
+
+/* In 2.2.3 /usr/include/linux/version.h includes a
+ * macro for this, but 2.0.35 doesn't - so I add it
+ * here if necessary.
+ */
+#ifndef KERNEL_VERSION
+#define KERNEL_VERSION(a, b, c) ((a << 16) + (b << 8) + (c))
+#endif
 
 #define VPMU_CDEVICE_NAME "vpmu-device"
 
@@ -196,10 +205,16 @@ static int device_file_open(struct inode *inode, struct file *file_ptr)
     }
 
     printk(KERN_DEBUG "VPMU: Device %s Open\n", file_ptr->f_path.dentry->d_iname);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
     printk(KERN_DEBUG "VPMU: Opened by the process \"%s\" (pid %d) on core %d\n",
            current->comm,
            current->pid,
            current->wake_cpu);
+#else
+    printk(KERN_DEBUG "VPMU: Opened by the process \"%s\" (pid %d)\n",
+           current->comm,
+           current->pid);
+#endif
     return 0;
 }
 
@@ -294,7 +309,11 @@ static int vpmu_construct_device(struct vpmu_dev *dev, int minor, struct class *
 }
 
 /*=====================================================================================*/
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 3, 0)
 static char *vpmu_devnode(struct device *dev, umode_t *mode)
+#else
+static char *vpmu_devnode(struct device *dev, mode_t *mode)
+#endif
 {
     if (!mode) return NULL;
     if (dev->devt == MKDEV(vpmu_major_number, 0)
