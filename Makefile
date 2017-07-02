@@ -48,6 +48,6 @@ device_driver/vpmu-device-x86.ko:	$(DRIVER_SRC) $(DRIVER_HEADER)
 	@cp $@ ./
 
 clean:
-	rm $(TARGETS)
+	rm $(TARGETS) *.ko
 	$(MAKE) -C device_driver clean
 
