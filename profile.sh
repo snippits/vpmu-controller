@@ -1,4 +1,6 @@
 #!/bin/sh
+# Copyright (c) 2017, Medicine Yeh
+
 SCRIPT_SRC=$(dirname $0)
 options=""
 
