@@ -204,7 +204,7 @@ void vpmu_fork_exec(const char *input_cmd)
     char *args[128] = {};
     int   i, idx = 0;
     char  cmd[1024]   = {};
-    int   size        = strlen(cmd);
+    int   size        = 0;
     int   flag_string = 0;
     char *pch;
 
@@ -215,6 +215,7 @@ void vpmu_fork_exec(const char *input_cmd)
         int status;
         waitpid(pid, &status, 0);
     } else {
+        size = strlen(cmd);
         printf("vpmu-control: Executing command '%s'\n", cmd);
         // String tokenize
         for (i = 1; i < size; i++) {
@@ -245,7 +246,7 @@ void vpmu_fork_exec(const char *input_cmd)
         }
 #ifdef DRY_RUN
         for (i = 0; i < 128; i++) {
-            if (strlen(args[i]) > 0) DRY_MSG("%s\n", args[i]);
+            if (args[i] != NULL && strlen(args[i]) > 0) DRY_MSG("%s\n", args[i]);
         }
 #endif
         // we are the child
