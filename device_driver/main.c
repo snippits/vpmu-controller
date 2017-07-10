@@ -161,6 +161,8 @@ static int simple_driver_init(void)
 
     // Pass kernel symbol address information to VPMU
     pass_kernel_symbol("mmap_region");
+    pass_kernel_symbol("mprotect_fixup");
+    pass_kernel_symbol("unmap_region");
     if (!pass_kernel_symbol("_do_fork")) pass_kernel_symbol("do_fork");
     pass_kernel_symbol("wake_up_new_task");
     pass_kernel_symbol("do_exit");
