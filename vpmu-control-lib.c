@@ -105,6 +105,11 @@ void vpmu_print_help_message(const char *self)
     printf(HELP_MESG, self);
 }
 
+int startwith(const char *pre, const char *str)
+{
+    return strncmp(pre, str, strlen(pre)) == 0;
+}
+
 static void trim_cmd(char *s)
 {
     char *p = s;
@@ -125,12 +130,14 @@ static void trim_cmd(char *s)
 
 static char *locate_binary(const char *bname)
 {
-    char *sys_path        = strdup(getenv("PATH"));
+    char *sys_path        = NULL;
     char *pch             = NULL;
     char *out_path        = NULL;
     char  full_path[1024] = {0};
 
-    pch = strtok(sys_path, ":");
+    if (bname == NULL) return strdup("");
+    sys_path = strdup(getenv("PATH"));
+    pch      = strtok(sys_path, ":");
     while (pch != NULL) {
         strcpy(full_path, pch);
         if (pch[strlen(pch) - 1] != '/') strcat(full_path, "/");
@@ -146,6 +153,8 @@ static char *locate_binary(const char *bname)
     }
 
     free(sys_path);
+
+    if (out_path == NULL) return strdup("");
     return out_path;
 }
 
@@ -219,11 +228,28 @@ static int tokenize(char *str)
     return cnt;
 }
 
+static void vpmu_binary_tokenize(VPMUBinary *binary)
+{
+    char *cmd = binary->argv[0];
+    int   len = strlen(cmd);
+    int   i = 0, j = 0;
+
+    binary->argc = tokenize(cmd);
+    for (i = 0, j = 0; i < binary->argc; i++) {
+        binary->argv[i] = &cmd[j];
+        for (; j < len; j++) {
+            if (cmd[j] == '\0') break;
+        }
+        j++; // Advance one step to the next character
+        if (j == len) break;
+    }
+}
+
 static char *form_abs_path(VPMUBinary *binary)
 {
     char *path = (char *)malloc(4096);
     path[0]    = '\0';
-    if (binary->absolute_dir) {
+    if (binary->absolute_dir && strlen(binary->absolute_dir) > 0) {
         strcpy(path, binary->absolute_dir);
         strcat(path, "/");
     }
@@ -235,7 +261,7 @@ static char *form_rel_path(VPMUBinary *binary)
 {
     char *path = (char *)malloc(4096);
     path[0]    = '\0';
-    if (binary->relative_dir) {
+    if (binary->relative_dir && strlen(binary->relative_dir) > 0) {
         strcpy(path, binary->relative_dir);
         strcat(path, "/");
     }
@@ -251,6 +277,7 @@ int vpmu_read_file(const char *path, char **buffer)
     char *pch;
     char  full_path[1024] = {0};
 
+    if (path == NULL || strlen(path) == 0) return 0;
     fp = fopen(path, "rb");
     if (fp == NULL) {
         pch = strtok(sys_path, ":");
@@ -459,80 +486,67 @@ void free_vpmu_binary(VPMUBinary *bin)
     if (bin->relative_dir) free(bin->relative_dir);
     if (bin->path) free(bin->path);
     if (bin->file_name) free(bin->file_name);
-    if (bin->argv) free(bin->argv);
+    if (bin->argv[0]) free(bin->argv[0]);
     if (bin) free(bin);
 }
 
 // "cmd" is an input argument, others are output arguments
 VPMUBinary *parse_all_paths_args(const char *cmd)
 {
+    int i = 0;
     // Return value
     VPMUBinary *binary = (VPMUBinary *)malloc(sizeof(VPMUBinary));
-    // Parsing
-    char *dirc  = strdup(cmd);
-    char *basec = strdup(cmd);
-    char *dname = dirname(dirc);
-    char *bname = basename(basec);
-    int   len   = strlen(bname);
-    int   argc  = 0;
-    char *path  = NULL;
-    int   i = 0, j = 0;
 
     // Reset all pointers
     memset(binary, 0, sizeof(VPMUBinary));
-    // Allocate the string for file_name and argv
-    binary->file_name = strdup(bname);
-    // Tokenize the string will also remove the string of arguments
-    // and leave file_name only the file name (without arguments).
-    argc = tokenize(binary->file_name);
 
-    binary->absolute_dir = locate_binary(binary->file_name);
-    binary->relative_dir = strdup(dname);
-    binary->argc         = argc;
-    binary->argv         = (char **)malloc(sizeof(char *) * (argc + 3)); // 3 is dummy
-    memset(binary->argv, 0, sizeof(char *) * (argc + 3));
-    for (i = 0, j = 0; i < argc; i++) {
-        binary->argv[i] = &binary->file_name[j];
-        for (; j < len; j++) {
-            if (binary->file_name[j] == '\0') break;
-        }
-        j++; // Advance one step to the next character
-        if (j == len) break;
-    }
+    // Tokenize the command string into argv
+    binary->argv[0] = strdup(cmd);
+    vpmu_binary_tokenize(binary);
 
-    path = form_rel_path(binary);
-    if (access(path, F_OK) != -1) {
-        binary->path = path;
-    } else {
-        free(path);
-        path = form_abs_path(binary);
-        if (access(path, F_OK) != -1) {
-            binary->path = path;
+    if (binary->argv[0]) {
+        char *dirc  = strdup(binary->argv[0]);
+        char *basec = strdup(binary->argv[0]);
+        char *dname = dirname(dirc);
+        char *bname = basename(basec);
+        char *path  = NULL;
+
+        binary->absolute_dir = locate_binary(bname);
+        binary->relative_dir = startwith("./", cmd) ? strdup(dname) : strdup("");
+        binary->file_name    = strdup(bname);
+
+        if (strlen(binary->relative_dir) > 0) {
+            // Use relative path as long as it is set to some value
+            path = form_rel_path(binary);
+            if (access(path, F_OK) != -1) {
+                binary->path = path;
+            }
         } else {
-            free(path);
+            // Use the path found from $PATH
+            if (strlen(binary->absolute_dir) > 0) {
+                path = form_abs_path(binary);
+                if (access(path, F_OK) != -1) {
+                    binary->path = path;
+                }
+            }
         }
-    }
-    if (binary->path == NULL) {
-        printf("vpmu-control: File '%s' does not exist.", cmd);
-        exit(-1);
+
+        free(dirc);
+        free(basec);
     }
 
     DRY_MSG("Command String   : '%s'\n", cmd);
-    if (binary->absolute_dir) {
-        DRY_MSG("Absolute Dir     : '%s'\n", binary->absolute_dir);
-    } else {
-        DRY_MSG("Absolute Dir     : '%s'\n", "(null)");
-    }
+    DRY_MSG("Absolute Dir     : '%s'\n", binary->absolute_dir);
     DRY_MSG("Relative Dir     : '%s'\n", binary->relative_dir);
-    DRY_MSG("Use path         : '%s'\n", binary->path);
     DRY_MSG("Binary name      : '%s'\n", binary->file_name);
     DRY_MSG("# of arguments   : %d\n", binary->argc);
     for (i = 0; i < binary->argc; i++) {
         DRY_MSG("    ARG[%d]      : '%s'\n", i, binary->argv[i]);
     }
-
-    free(dirc);
-    free(basec);
+    if (binary->path == NULL) {
+        printf("vpmu-control: File '%s' does not exist.", binary->file_name);
+        exit(-1);
+    }
 
     return binary;
 }

@@ -17,9 +17,8 @@ typedef struct VPMUBinary {
     char *relative_dir;
     char *path;
     char *file_name;
-    // Args
-    char **argv;
-    int    argc;
+    char *argv[256];
+    int   argc;
 } VPMUBinary;
 
 #define ANY_VALUE 0
