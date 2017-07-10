@@ -1,12 +1,14 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <unistd.h> // access()
 #include <assert.h>
 #include <string.h>
 #include <ctype.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 #include <fcntl.h>
+
+#include <libgen.h> // basename(), dirname()
 
 #include "vpmu-control-lib.h"
 #include "efd.h"
@@ -103,41 +105,142 @@ void vpmu_print_help_message(const char *self)
     printf(HELP_MESG, self);
 }
 
-static int locate_binary(const char *path, char *out_path)
+static void trim_cmd(char *s)
 {
-    FILE *fp       = NULL;
-    char *sys_path = strdup(getenv("PATH"));
-    char *pch;
+    char *p = s;
+    int   l = strlen(p);
+
+    while (isspace(p[l - 1])) p[--l] = 0;
+    while (*p && isspace(*p)) ++p, --l;
+
+    memmove(s, p, l + 1);
+
+    // Dealing with escape space at the end of command
+    if (s[strlen(s) - 1] == '\\') {
+        // Add another space if the last character is a space
+        s[strlen(s)]     = ' ';
+        s[strlen(s) + 1] = '\0';
+    }
+}
+
+static char *locate_binary(const char *bname)
+{
+    char *sys_path        = strdup(getenv("PATH"));
+    char *pch             = NULL;
+    char *out_path        = NULL;
     char  full_path[1024] = {0};
 
-    fp = fopen(path, "rb");
-    if (fp == NULL) {
-        pch = strtok(sys_path, ":");
-        while (pch != NULL) {
-            strcpy(full_path, pch);
-            int size = strlen(full_path);
-            if (full_path[size - 1] != '/') {
-                full_path[size]     = '/';
-                full_path[size + 1] = '\0';
-            }
-            strcat(full_path, path);
-            fp = fopen(full_path, "rb");
-            if (fp != NULL) break;
-            pch = strtok(NULL, ":");
+    pch = strtok(sys_path, ":");
+    while (pch != NULL) {
+        strcpy(full_path, pch);
+        if (pch[strlen(pch) - 1] != '/') strcat(full_path, "/");
+        strcat(full_path, bname);
+        if (access(full_path, X_OK) != -1) { // File exist and is executable
+            out_path = strdup(pch);
+            // Remove the tailing slash for consistency
+            if (out_path[strlen(out_path) - 1] == '/')
+                out_path[strlen(out_path) - 1] = '\0';
+            break;
         }
+        pch = strtok(NULL, ":");
     }
 
     free(sys_path);
-    if (fp != NULL)
-        fclose(fp);
-    else
-        return -1;
-    if (strlen(full_path) == 0) {
-        strcpy(out_path, path);
+    return out_path;
+}
+
+static char *find_ld_path(char *message)
+{
+    int   i      = 0;
+    int   offset = 0;
+    int   index  = 0;
+    char *pch    = strstr(message, "=>");
+
+    if (pch == NULL) {
+        // Not found in the path, it's just name
+        for (i = 0; message[i] != '\0'; i++) {
+            if (message[i] == '\\') continue;
+            if (index == 0 && message[i] != ' ') index = i;
+            if (index != 0 && message[i] == ' ') {
+                message[i] = '\0';
+                return &message[index];
+            }
+        }
     } else {
-        strcpy(out_path, full_path);
+        // Found in the path
+        offset = (int)(pch - message) + strlen("=>");
+        for (i = offset; message[i] != '\0'; i++) {
+            if (message[i] == '\\') continue;
+            if (index == 0 && message[i] != ' ') index = i;
+            if (index != 0 && message[i] == ' ') {
+                message[i] = '\0';
+                return &message[index];
+            }
+        }
     }
-    return 0;
+    return NULL;
+}
+
+static inline int isquote(char c)
+{
+    return (c == '"' || c == '\'');
+}
+
+// Tokenize string by spaces
+static int tokenize(char *str)
+{
+    int i           = 0;
+    int size        = 0;
+    int escape_flag = 0;
+    int cnt         = 1;
+
+    if (str != NULL) size = strlen(str);
+    // String tokenize
+    for (i = 0; i < size; i++) {
+        char c = str[i];
+        // Skip escape characters
+        if (!escape_flag && c == '\\') {
+            i++;
+            continue;
+        }
+        // Escape quated string
+        if (!escape_flag && isquote(c)) {
+            escape_flag = 1;
+        } else if (escape_flag && isquote(c)) {
+            escape_flag = 0;
+        }
+        // Set \0 to all spaces which is not escaped
+        if (!escape_flag && isspace(c)) {
+            str[i] = '\0';
+            cnt++;
+        }
+    }
+
+    return cnt;
+}
+
+static char *form_abs_path(VPMUBinary *binary)
+{
+    char *path = (char *)malloc(4096);
+    path[0]    = '\0';
+    if (binary->absolute_dir) {
+        strcpy(path, binary->absolute_dir);
+        strcat(path, "/");
+    }
+    if (binary->file_name) strcat(path, binary->file_name);
+    return path;
+}
+
+static char *form_rel_path(VPMUBinary *binary)
+{
+    char *path = (char *)malloc(4096);
+    path[0]    = '\0';
+    if (binary->relative_dir) {
+        strcpy(path, binary->relative_dir);
+        strcat(path, "/");
+    }
+    if (binary->file_name) strcat(path, binary->file_name);
+    return path;
 }
 
 int vpmu_read_file(const char *path, char **buffer)
@@ -187,104 +290,26 @@ int vpmu_read_file(const char *path, char **buffer)
     return file_size;
 }
 
-static void trim(char *s)
+void vpmu_fork_exec(VPMUBinary *binary)
 {
-    char *p = s;
-    int   l = strlen(p);
+    pid_t pid = fork();
 
-    while (isspace(p[l - 1])) p[--l] = 0;
-    while (*p && isspace(*p)) ++p, --l;
+    if (binary == NULL || strlen(binary->path) == 0) {
+        printf("vpmu-control: error, command is empty\n");
+        return;
+    }
 
-    memmove(s, p, l + 1);
-}
-
-void vpmu_fork_exec(const char *input_cmd)
-{
-    pid_t pid       = fork();
-    char *args[128] = {};
-    int   i, idx = 0;
-    char  cmd[1024]   = {};
-    int   size        = 0;
-    int   flag_string = 0;
-    char *pch;
-
-    strncpy(cmd, input_cmd, 1024);
     if (pid == -1) {
         printf("vpmu-control: error, failed to fork()");
     } else if (pid > 0) {
         int status;
         waitpid(pid, &status, 0);
     } else {
-        size = strlen(cmd);
-        printf("vpmu-control: Executing command '%s'\n", cmd);
-        // String tokenize
-        for (i = 1; i < size; i++) {
-            if (flag_string == 0 && (cmd[i] == '"' || cmd[i] == '\'')) {
-                flag_string = 1;
-            } else if (flag_string == 1 && (cmd[i] == '"' || cmd[i] == '\'')) {
-                flag_string = 0;
-            }
-            if (flag_string == 0 && cmd[i] == ' ' && cmd[i - 1] != '\\') {
-                cmd[i] = '\0';
-            }
-        }
-
-        pch = &cmd[0];
-        i   = 0;
-        while (pch != NULL) {
-            if (pch[0] != '\0') {
-                // printf("pch: %s\n", pch);
-                args[idx++] = pch;
-            }
-            for (; i < size && cmd[i] != '\0'; i++)
-                ;
-            if (i == size)
-                pch = NULL;
-            else
-                pch = &cmd[i + 1];
-            i++;
-        }
-#ifdef DRY_RUN
-        for (i = 0; i < 128; i++) {
-            if (args[i] != NULL && strlen(args[i]) > 0) DRY_MSG("%s\n", args[i]);
-        }
-#endif
+        printf("vpmu-control: Executing '%s'\n", binary->path);
         // we are the child
-        execvp(args[0], args);
+        execvp(binary->path, binary->argv);
         _exit(EXIT_FAILURE); // exec never returns
     }
-}
-
-static char *find_path(char *message)
-{
-    int   i      = 0;
-    int   offset = 0;
-    int   index  = 0;
-    char *pch    = strstr(message, "=>");
-
-    if (pch == NULL) {
-        // Not found in the path, it's just name
-        for (i = 0; message[i] != '\0'; i++) {
-            if (message[i] == '\\') continue;
-            if (index == 0 && message[i] != ' ') index = i;
-            if (index != 0 && message[i] == ' ') {
-                message[i] = '\0';
-                return &message[index];
-            }
-        }
-    } else {
-        // Found in the path
-        offset = (int)(pch - message) + strlen("=>");
-        for (i = offset; message[i] != '\0'; i++) {
-            if (message[i] == '\\') continue;
-            if (index == 0 && message[i] != ' ') index = i;
-            if (index != 0 && message[i] == ' ') {
-                message[i] = '\0';
-                return &message[index];
-            }
-        }
-    }
-    return NULL;
 }
 
 int is_dynamic_binary(char *file_path)
@@ -313,15 +338,18 @@ int is_dynamic_binary(char *file_path)
 
     fread(buffer, 1, lSize, fp);
 
-    for (i = 0; i < lSize - 6; i++) {
-        if (buffer[i] == 'G' // Compare to string GLIBC_
-            && buffer[i + 1] == 'L'
-            && buffer[i + 2] == 'I'
-            && buffer[i + 3] == 'B'
-            && buffer[i + 4] == 'C'
-            && buffer[i + 5] == '_') {
-            is_dynamic = 1;
-            break;
+    // Check the magic word
+    if (lSize >= 3 && buffer[0] == 'E' && buffer[1] == 'L' && buffer[2] == 'F') {
+        for (i = 0; i < lSize - 6; i++) {
+            if (buffer[i] == 'G' // Compare to string GLIBC_
+                && buffer[i + 1] == 'L'
+                && buffer[i + 2] == 'I'
+                && buffer[i + 3] == 'B'
+                && buffer[i + 4] == 'C'
+                && buffer[i + 5] == '_') {
+                is_dynamic = 1;
+                break;
+            }
         }
     }
 
@@ -351,7 +379,7 @@ char **get_library_list(const char *cmd)
     library_list = (char **)malloc(sizeof(char *) * size_of_list);
     DRY_MSG("Find shared libraries in this binary\n");
     while (fgets(message, sizeof(message), fp) != NULL) {
-        library_list[cnt] = strdup(find_path(message));
+        library_list[cnt] = strdup(find_ld_path(message));
         if (library_list[cnt] != NULL) {
             DRY_MSG("    %d) %s\n", cnt, library_list[cnt]);
             cnt++;
@@ -376,25 +404,34 @@ void release_library_list(char **library_list)
 
 void vpmu_load_and_send(vpmu_handler_t handler, const char *file_path)
 {
-    char   full_path[2048] = {0};
-    char * buffer          = NULL;
-    size_t size            = 0;
+    char *basec  = strdup(file_path);
+    char *buffer = NULL;
+    // The final path
+    const char *path = NULL;
+    // The size of buffer
+    size_t size = 0;
 
-    // The full path would be set as a relative path if it's not found
-    locate_binary(file_path, full_path);
-    size = vpmu_read_file(file_path, &buffer);
+    if (access(file_path, F_OK) != -1) {
+        // File exist, send it even it's not executable
+        size = vpmu_read_file(file_path, &buffer);
+        path = file_path;
+    } else { // Find executables in the $PATH
+        path = locate_binary(basename(basec));
+        size = vpmu_read_file(path, &buffer);
+    }
     if (size == 0) return;
 
-    HW_W(VPMU_MMAP_ADD_PROC_NAME, full_path);
+    HW_W(VPMU_MMAP_ADD_PROC_NAME, path);
     HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
     HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
 
-    DRY_MSG("    send binary path      : %s\n", full_path);
+    DRY_MSG("    send binary path      : %s\n", path);
     DRY_MSG("    send binary size      : %lu\n", size);
     DRY_MSG("    send buffer pointer   : %p\n", buffer);
     DRY_MSG("\n");
 
     if (buffer) free(buffer);
+    free(basec);
 }
 
 void vpmu_load_and_send_all(vpmu_handler_t handler, const char *cmd)
@@ -416,37 +453,88 @@ void vpmu_load_and_send_all(vpmu_handler_t handler, const char *cmd)
     release_library_list(library_list);
 }
 
-// "cmd" is an input argument, others are output arguments
-void parse_all_paths(const char *cmd, char *full_path, char *file_path)
+void free_vpmu_binary(VPMUBinary *bin)
 {
-    char exec_name[512] = {0}, args[1024] = {0};
-    // Indices
-    int index = 0, index_path_end = 0;
-    int j;
+    if (bin->absolute_dir) free(bin->absolute_dir);
+    if (bin->relative_dir) free(bin->relative_dir);
+    if (bin->path) free(bin->path);
+    if (bin->file_name) free(bin->file_name);
+    if (bin->argv) free(bin->argv);
+    if (bin) free(bin);
+}
 
-    // Locate the last string in the path
-    for (j = 1; j < strlen(cmd); j++) {
-        if (cmd[j] == ' ' && cmd[j - 1] != '\\') {
-            break;
+// "cmd" is an input argument, others are output arguments
+VPMUBinary *parse_all_paths_args(const char *cmd)
+{
+    // Return value
+    VPMUBinary *binary = (VPMUBinary *)malloc(sizeof(VPMUBinary));
+    // Parsing
+    char *dirc  = strdup(cmd);
+    char *basec = strdup(cmd);
+    char *dname = dirname(dirc);
+    char *bname = basename(basec);
+    int   len   = strlen(bname);
+    int   argc  = 0;
+    char *path  = NULL;
+    int   i = 0, j = 0;
+
+    // Reset all pointers
+    memset(binary, 0, sizeof(VPMUBinary));
+    // Allocate the string for file_name and argv
+    binary->file_name = strdup(bname);
+    // Tokenize the string will also remove the string of arguments
+    // and leave file_name only the file name (without arguments).
+    argc = tokenize(binary->file_name);
+
+    binary->absolute_dir = locate_binary(binary->file_name);
+    binary->relative_dir = strdup(dname);
+    binary->argc         = argc;
+    binary->argv         = (char **)malloc(sizeof(char *) * (argc + 3)); // 3 is dummy
+    memset(binary->argv, 0, sizeof(char *) * (argc + 3));
+    for (i = 0, j = 0; i < argc; i++) {
+        binary->argv[i] = &binary->file_name[j];
+        for (; j < len; j++) {
+            if (binary->file_name[j] == '\0') break;
         }
-        if (cmd[j] == '/' && cmd[j - 1] != '\\') {
-            index = j + 1;
+        j++; // Advance one step to the next character
+        if (j == len) break;
+    }
+
+    path = form_rel_path(binary);
+    if (access(path, F_OK) != -1) {
+        binary->path = path;
+    } else {
+        free(path);
+        path = form_abs_path(binary);
+        if (access(path, F_OK) != -1) {
+            binary->path = path;
+        } else {
+            free(path);
         }
     }
-    // Find the end of the path
-    for (j = index; j < strlen(cmd) && cmd[j] != ' '; j++)
-        ;
-    index_path_end = j;
+    if (binary->path == NULL) {
+        printf("vpmu-control: File '%s' does not exist.", cmd);
+        exit(-1);
+    }
 
-    strncpy(file_path, cmd, index_path_end);
-    strncpy(args, cmd + index_path_end, strlen(cmd) - index_path_end);
-    strncpy(exec_name, cmd + index, index_path_end - index);
+    DRY_MSG("Command String   : '%s'\n", cmd);
+    if (binary->absolute_dir) {
+        DRY_MSG("Absolute Dir     : '%s'\n", binary->absolute_dir);
+    } else {
+        DRY_MSG("Absolute Dir     : '%s'\n", "(null)");
+    }
+    DRY_MSG("Relative Dir     : '%s'\n", binary->relative_dir);
+    DRY_MSG("Use path         : '%s'\n", binary->path);
+    DRY_MSG("Binary name      : '%s'\n", binary->file_name);
+    DRY_MSG("# of arguments   : %d\n", binary->argc);
+    for (i = 0; i < binary->argc; i++) {
+        DRY_MSG("    ARG[%d]      : '%s'\n", i, binary->argv[i]);
+    }
 
-    // The full path would be set as a relative path if it's not found
-    locate_binary(file_path, full_path);
+    free(dirc);
+    free(basec);
 
-    DRY_MSG("command          : %s\n", cmd);
-    DRY_MSG("binary name      : %s\n", exec_name);
+    return binary;
 }
 
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
@@ -516,7 +604,6 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
 
     /* Then parse all the action arguments */
     for (i = 0; i < argc; i++) {
-        // fprintf(stderr, "argv[%d] = %s\n", i, argv[i]);
         if (STR_IS_2(argv[i], "--read", "-r")) {
             int index = atoi(argv[++i]);
             int value = HW_R(index);
@@ -543,25 +630,20 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
             DRY_MSG("--report\n");
             HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
         } else if (STR_IS_2(argv[i], "--exec", "-e")) {
-            // Names and paths
-            char  full_path[2048] = {0}, file_path[1024] = {0};
+            VPMUBinary *binary = NULL;
+            // Command string
             char *cmd = strdup(argv[++i]);
-            trim(cmd);
-            // Dealing with escape space at the end of command
-            if (cmd[strlen(cmd) - 1] == '\\') {
-                cmd[strlen(cmd)]     = ' ';
-                cmd[strlen(cmd) + 1] = '\0';
-            }
 
-            parse_all_paths(cmd, full_path, file_path);
+            trim_cmd(cmd);
+            binary = parse_all_paths_args(cmd);
 
             if (handler->flag_monitor) {
                 // Send the libraries to VPMU
-                if (!is_dynamic_binary(full_path)) {
-                    vpmu_load_and_send_all(handler, cmd);
+                if (!is_dynamic_binary(binary->path)) {
+                    vpmu_load_and_send_all(handler, binary->path);
                 }
                 // Send the main program to VPMU (this must be the last one)
-                vpmu_load_and_send(handler, file_path);
+                vpmu_load_and_send(handler, binary->path);
                 HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
 
@@ -569,24 +651,25 @@ vpmu_handler_t vpmu_parse_arguments(int argc, char **argv)
                 printf("Please use controller to print report when need\n");
 
             } else if (handler->flag_remove) {
-                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
             } else if (handler->flag_trace) {
                 // Send the libraries to VPMU
-                if (!is_dynamic_binary(full_path)) {
-                    vpmu_load_and_send_all(handler, cmd);
+                if (!is_dynamic_binary(binary->path)) {
+                    vpmu_load_and_send_all(handler, binary->path);
                 }
                 // Send the main program to VPMU (this must be the last one)
-                vpmu_load_and_send(handler, file_path);
+                vpmu_load_and_send(handler, binary->path);
 
                 HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler->flag_model);
                 HW_W(VPMU_MMAP_RESET, ANY_VALUE);
 
-                vpmu_fork_exec(cmd);
-                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, full_path);
+                vpmu_fork_exec(binary);
+                HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
                 HW_W(VPMU_MMAP_REPORT, ANY_VALUE);
             } else {
-                vpmu_fork_exec(cmd);
+                vpmu_fork_exec(binary);
             }
+            free_vpmu_binary(binary);
             free(cmd);
         }
     }

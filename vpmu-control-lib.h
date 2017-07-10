@@ -12,6 +12,16 @@ typedef struct VPMU_HANDLER {
 } VPMU_HANDLER;
 typedef VPMU_HANDLER *vpmu_handler_t;
 
+typedef struct VPMUBinary {
+    char *absolute_dir;
+    char *relative_dir;
+    char *path;
+    char *file_name;
+    // Args
+    char **argv;
+    int    argc;
+} VPMUBinary;
+
 #define ANY_VALUE 0
 
 #define STR_IS(__A, __B) (strcmp(__A, __B) == 0)
@@ -25,7 +35,7 @@ void vpmu_close(vpmu_handler_t handler);
 void vpmu_print_help_message(const char *self);
 vpmu_handler_t vpmu_parse_arguments(int argc, char **argv);
 int vpmu_read_file(const char *path, char **buffer);
-void vpmu_fork_exec(const char *cmd);
+void vpmu_fork_exec(VPMUBinary *binary);
 
 int is_dynamic_binary(char *file_path);
 char **get_library_list(const char *cmd);
@@ -33,6 +43,7 @@ void release_library_list(char **library_list);
 void vpmu_load_and_send(vpmu_handler_t handler, const char *file_path);
 void vpmu_load_and_send_all(vpmu_handler_t handler, const char *cmd);
 
-void parse_all_paths(const char *cmd, char *full_path, char *file_path);
+VPMUBinary *parse_all_paths_args(const char *cmd);
+void free_vpmu_binary(VPMUBinary *bin);
 
 #endif
