@@ -164,6 +164,9 @@ static char *find_ld_path(char *message)
     int   offset = 0;
     int   index  = 0;
     char *pch    = strstr(message, "=>");
+    // Buffer for solving real path
+    char buff[1024] = {};
+    int  found_flag = 0;
 
     if (pch == NULL) {
         // Not found in the path, it's just name
@@ -172,7 +175,8 @@ static char *find_ld_path(char *message)
             if (index == 0 && message[i] != ' ') index = i;
             if (index != 0 && message[i] == ' ') {
                 message[i] = '\0';
-                return &message[index];
+                found_flag = 1;
+                break;
             }
         }
     } else {
@@ -183,10 +187,17 @@ static char *find_ld_path(char *message)
             if (index == 0 && message[i] != ' ') index = i;
             if (index != 0 && message[i] == ' ') {
                 message[i] = '\0';
-                return &message[index];
+                found_flag = 1;
+                break;
             }
         }
     }
+    if (found_flag) {
+        strncpy(buff, &message[index], sizeof(buff));
+        realpath(&message[index], buff);
+        return strdup(buff);
+    }
+
     return NULL;
 }
 
