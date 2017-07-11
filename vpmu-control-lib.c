@@ -511,7 +511,7 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
         char *bname = basename(basec);
         char *path  = NULL;
 
-        binary->absolute_dir = locate_binary(bname);
+        binary->absolute_dir = startwith("/", cmd) ? strdup(dname) : locate_binary(bname);
         binary->relative_dir = startwith("./", cmd) ? strdup(dname) : strdup("");
         binary->file_name    = strdup(bname);
 
