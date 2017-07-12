@@ -92,9 +92,12 @@ void vpmu_print_help_message(const char *self)
 VPMUHandler vpmu_open(const char *dev_path)
 {
     VPMUHandler handler = {}; // Zero initialized
+    // Set the offset to VPMU_DEVICE_BASE_ADDR if it is mem
+    off_t offset = startwith(dev_path, "/dev/mem") ? VPMU_DEVICE_BASE_ADDR : 0;
 
 #ifdef DRY_RUN
     handler.ptr = (uintptr_t *)malloc(1024);
+    (void)offset; // For unused warning
 #else
     handler.fd = open(dev_path, O_RDWR | O_SYNC);
     if (handler.fd < 0) {
@@ -106,7 +109,7 @@ VPMUHandler vpmu_open(const char *dev_path)
                                     PROT_READ | PROT_WRITE,
                                     MAP_SHARED,
                                     handler.fd,
-                                    VPMU_DEVICE_BASE_ADDR);
+                                    offset);
     if (handler.ptr == MAP_FAILED) {
         ERR_MSG("mmap '%s' failed", dev_path);
         exit(4);
