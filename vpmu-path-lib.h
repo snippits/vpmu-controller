@@ -187,7 +187,10 @@ static inline char *get_library_path(char *message)
         char *str = trim(message);
         // Tokenize the string will get us only the path
         tokenize(str);
-        strncpy(buff, str, sizeof(buff));
+        if (realpath(str, buff) == NULL) {
+            // Output the path directly if it fails
+            strncpy(buff, str, sizeof(buff));
+        }
         free(str);
     }
 
