@@ -442,11 +442,12 @@ void vpmu_profile_binary(VPMUHandler handler, VPMUBinary *binary)
 void vpmu_do_exec(VPMUHandler handler, const char *cmd_str)
 {
     VPMUBinary *binary = NULL;
-    // Command string
-    char *cmd = trim(cmd_str);
-
-    binary = parse_all_paths_args(cmd);
-    vpmu_update_library_list(binary);
+    { // Parse command string to VPMU binary struct
+        char *cmd = trim(cmd_str);
+        binary    = parse_all_paths_args(cmd);
+        vpmu_update_library_list(binary);
+        free(cmd);
+    }
 
     if (handler.flag_monitor) {
         vpmu_monitor_binary(handler, binary);
@@ -458,5 +459,4 @@ void vpmu_do_exec(VPMUHandler handler, const char *cmd_str)
         vpmu_execute_binary(binary);
     }
     free_vpmu_binary(binary);
-    free(cmd);
 }
