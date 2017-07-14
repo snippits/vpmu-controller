@@ -400,11 +400,11 @@ void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary)
         vpmu_load_and_send_libs(handler, binary);
         // Send the main program to VPMU (this must be the last one)
         vpmu_load_and_send(handler, binary->path);
-        LOG_MSG("Monitoring: %s", binary->path);
+        LOG_MSG("Monitoring: '%s'", binary->path);
     } else {
         // Just tell VPMU to monitor the process with the name
         HW_W(VPMU_MMAP_ADD_PROC_NAME, binary->argv[0]);
-        LOG_MSG("Monitoring: %s", binary->argv[0]);
+        LOG_MSG("Monitoring: '%s'", binary->argv[0]);
     }
     vpmu_reset_counters(handler);
     LOG_MSG("Please use controller to print report when need");
@@ -414,17 +414,17 @@ void vpmu_stop_monitoring_binary(VPMUHandler handler, VPMUBinary *binary)
 {
     if (binary->path) {
         HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
-        LOG_MSG("Stop Monitoring: %s", binary->path);
+        LOG_MSG("Stop Monitoring: '%s'", binary->path);
     } else {
         HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->argv[0]);
-        LOG_MSG("Stop Monitoring: %s", binary->argv[0]);
+        LOG_MSG("Stop Monitoring: '%s'", binary->argv[0]);
     }
 }
 
 void vpmu_profile_binary(VPMUHandler handler, VPMUBinary *binary)
 {
     if (binary->path == NULL) {
-        ERR_MSG("Can't find and execute %s", binary->argv[0]);
+        ERR_MSG("Can't find and execute '%s'", binary->argv[0]);
         return;
     }
     // Send the libraries to VPMU
