@@ -12,7 +12,7 @@
 #pragma message "DRY_RUN is defined. Compiled with dry run!!"
 #define DRY_MSG(str, ...) fprintf(stderr, "\033[1;32m" str "\033[0;00m", ##__VA_ARGS__)
 #else
-#define DRY_MSG(str, ...) ;
+#define DRY_MSG(str, ...) DBG_MSG("\033[1;32m" str "\033[0;00m", ##__VA_ARGS__)
 #endif
 
 #define ERR_MSG(str, ...)                                                                \
@@ -57,15 +57,12 @@ void vpmu_print_help_message(const char *self);
 
 VPMUHandler vpmu_open(const char *dev_path);
 void vpmu_close(VPMUHandler handler);
-uint64_t vpmu_read_value(VPMUHandler handler, uintptr_t index);
-void vpmu_write_value(VPMUHandler handler, uintptr_t index, uint64_t value);
+uintptr_t vpmu_read_value(VPMUHandler handler, uintptr_t index);
+void vpmu_write_value(VPMUHandler handler, uintptr_t index, uintptr_t value);
 void vpmu_print_report(VPMUHandler handler);
 void vpmu_start_fullsystem_tracing(VPMUHandler handler);
 void vpmu_end_fullsystem_tracing(VPMUHandler handler);
 void vpmu_reset_counters(VPMUHandler handler);
-
-int vpmu_read_file(const char *path, char **buffer);
-void vpmu_fork_exec(VPMUBinary *binary);
 
 bool is_dynamic_binary(const char *file_path);
 void vpmu_update_library_list(VPMUBinary *binary);
@@ -75,5 +72,10 @@ void vpmu_load_and_send_libs(VPMUHandler handler, VPMUBinary *binary);
 VPMUBinary *parse_all_paths_args(const char *cmd);
 void free_vpmu_binary(VPMUBinary *bin);
 
-void vpmu_profile(VPMUHandler handler, const char *cmd_str);
+void vpmu_execute_binary(VPMUBinary *binary);
+void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary);
+void vpmu_stop_monitoring_binary(VPMUHandler handler, VPMUBinary *binary);
+void vpmu_profile_binary(VPMUHandler handler, VPMUBinary *binary);
+void vpmu_do_exec(VPMUHandler handler, const char *cmd_str);
+
 #endif

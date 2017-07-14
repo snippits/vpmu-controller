@@ -129,16 +129,15 @@ void vpmu_close(VPMUHandler handler)
 #endif
 }
 
-uint64_t vpmu_read_value(VPMUHandler handler, uintptr_t index)
+uintptr_t vpmu_read_value(VPMUHandler handler, uintptr_t index)
 {
-    DRY_MSG("read %lu\n", index);
+    DRY_MSG("read 0x%" PRIxPTR "\n", index);
     return HW_R(index);
 }
 
-void vpmu_write_value(VPMUHandler handler, uintptr_t index, uint64_t value)
+void vpmu_write_value(VPMUHandler handler, uintptr_t index, uintptr_t value)
 {
-
-    DRY_MSG("write %lu at address %lu\n", value, index);
+    DRY_MSG("write 0x%" PRIxPTR " at address 0x%" PRIxPTR "\n", value, index);
     HW_W(index, value);
 }
 
@@ -165,52 +164,6 @@ void vpmu_reset_counters(VPMUHandler handler)
 {
     HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler.flag_model);
     HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
-}
-
-static char *form_abs_path(VPMUBinary *binary)
-{
-    char *path = (char *)malloc(4096);
-    path[0]    = '\0';
-    if (binary->absolute_dir && strlen(binary->absolute_dir) > 0) {
-        strcpy(path, binary->absolute_dir);
-        strcat(path, "/");
-    }
-    if (binary->file_name) strcat(path, binary->file_name);
-    return path;
-}
-
-static char *form_rel_path(VPMUBinary *binary)
-{
-    char *path = (char *)malloc(4096);
-    path[0]    = '\0';
-    if (binary->relative_dir && strlen(binary->relative_dir) > 0) {
-        strcpy(path, binary->relative_dir);
-        strcat(path, "/");
-    }
-    if (binary->file_name) strcat(path, binary->file_name);
-    return path;
-}
-
-void vpmu_fork_exec(VPMUBinary *binary)
-{
-    pid_t pid = fork();
-
-    if (binary == NULL || binary->path == NULL || strlen(binary->path) == 0) {
-        ERR_MSG("Error, command is empty");
-        return;
-    }
-
-    if (pid == -1) {
-        ERR_MSG("Error, failed to fork()");
-    } else if (pid > 0) {
-        int status;
-        waitpid(pid, &status, 0);
-    } else {
-        LOG_MSG("Executing '%s'", binary->path);
-        // we are the child
-        execvp(binary->path, binary->argv);
-        _exit(EXIT_FAILURE); // exec never returns
-    }
 }
 
 bool is_dynamic_binary(const char *file_path)
@@ -294,7 +247,7 @@ void vpmu_load_and_send(VPMUHandler handler, const char *file_path)
 
         DBG_MSG("%-30ssend '%s'\n", "[vpmu_load_and_send]", path);
         DRY_MSG("    send binary path      : %s\n", path);
-        DRY_MSG("    send binary size      : %lu\n", size);
+        DRY_MSG("    send binary size      : %" PRIxPTR "\n", size);
         DRY_MSG("    send buffer pointer   : %p\n", buffer);
         DRY_MSG("\n");
     }
@@ -306,13 +259,39 @@ void vpmu_load_and_send_libs(VPMUHandler handler, VPMUBinary *binary)
 {
     int j = 0;
     for (j = 0; binary->libraries[j] != NULL; j++) {
-        if (binary->libraries[j][0] != '/' && binary->libraries[j][0] != '.') {
+        char *path = binary->libraries[j];
+        if (path[0] != '/' && path[0] != '.') {
             // Skip libraries that are still just a name (not found)
+            DBG_MSG("%-30sskip '%s'\n", "[vpmu_load_and_send_libs]", path);
             continue;
         } else {
-            vpmu_load_and_send(handler, binary->libraries[j]);
+            vpmu_load_and_send(handler, path);
         }
     }
+}
+
+static char *form_abs_path(VPMUBinary *binary)
+{
+    char *path = (char *)malloc(4096);
+    path[0]    = '\0';
+    if (binary->absolute_dir && strlen(binary->absolute_dir) > 0) {
+        strcpy(path, binary->absolute_dir);
+        strcat(path, "/");
+    }
+    if (binary->file_name) strcat(path, binary->file_name);
+    return path;
+}
+
+static char *form_rel_path(VPMUBinary *binary)
+{
+    char *path = (char *)malloc(4096);
+    path[0]    = '\0';
+    if (binary->relative_dir && strlen(binary->relative_dir) > 0) {
+        strcpy(path, binary->relative_dir);
+        strcat(path, "/");
+    }
+    if (binary->file_name) strcat(path, binary->file_name);
+    return path;
 }
 
 // "cmd" is an input argument, others are output arguments
@@ -392,7 +371,75 @@ void free_vpmu_binary(VPMUBinary *bin)
     if (bin) free(bin);
 }
 
-void vpmu_profile(VPMUHandler handler, const char *cmd_str)
+void vpmu_execute_binary(VPMUBinary *binary)
+{
+    pid_t pid = fork();
+
+    if (binary == NULL || binary->path == NULL || strlen(binary->path) == 0) {
+        ERR_MSG("Error, command is empty");
+        return;
+    }
+
+    if (pid == -1) {
+        ERR_MSG("Error, failed to fork()");
+    } else if (pid > 0) {
+        int status;
+        waitpid(pid, &status, 0);
+    } else {
+        LOG_MSG("Executing '%s'", binary->path);
+        // we are the child
+        execvp(binary->path, binary->argv);
+        _exit(EXIT_FAILURE); // exec never returns
+    }
+}
+
+void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary)
+{
+    if (binary->path) {
+        // Send the libraries to VPMU
+        vpmu_load_and_send_libs(handler, binary);
+        // Send the main program to VPMU (this must be the last one)
+        vpmu_load_and_send(handler, binary->path);
+        LOG_MSG("Monitoring: %s", binary->path);
+    } else {
+        // Just tell VPMU to monitor the process with the name
+        HW_W(VPMU_MMAP_ADD_PROC_NAME, binary->argv[0]);
+        LOG_MSG("Monitoring: %s", binary->argv[0]);
+    }
+    vpmu_reset_counters(handler);
+    LOG_MSG("Please use controller to print report when need");
+}
+
+void vpmu_stop_monitoring_binary(VPMUHandler handler, VPMUBinary *binary)
+{
+    if (binary->path) {
+        HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
+        LOG_MSG("Stop Monitoring: %s", binary->path);
+    } else {
+        HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->argv[0]);
+        LOG_MSG("Stop Monitoring: %s", binary->argv[0]);
+    }
+}
+
+void vpmu_profile_binary(VPMUHandler handler, VPMUBinary *binary)
+{
+    if (binary->path == NULL) {
+        ERR_MSG("Can't find and execute %s", binary->argv[0]);
+        return;
+    }
+    // Send the libraries to VPMU
+    vpmu_load_and_send_libs(handler, binary);
+    // Send the main program to VPMU (this must be the last one)
+    vpmu_load_and_send(handler, binary->path);
+
+    vpmu_reset_counters(handler);
+    vpmu_execute_binary(binary);
+
+    HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
+    HW_W(VPMU_MMAP_REPORT, VPMU_DONT_CARE);
+}
+
+void vpmu_do_exec(VPMUHandler handler, const char *cmd_str)
 {
     VPMUBinary *binary = NULL;
     // Command string
@@ -402,47 +449,13 @@ void vpmu_profile(VPMUHandler handler, const char *cmd_str)
     vpmu_update_library_list(binary);
 
     if (handler.flag_monitor) {
-        if (binary->path) {
-            // Send the libraries to VPMU
-            vpmu_load_and_send_libs(handler, binary);
-            // Send the main program to VPMU (this must be the last one)
-            vpmu_load_and_send(handler, binary->path);
-            LOG_MSG("Monitoring: %s", binary->path);
-        } else {
-            HW_W(VPMU_MMAP_ADD_PROC_NAME, binary->argv[0]);
-            LOG_MSG("Monitoring: %s", binary->argv[0]);
-        }
-        HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler.flag_model);
-        HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
-
-        LOG_MSG("Please use controller to print report when need");
-
+        vpmu_monitor_binary(handler, binary);
     } else if (handler.flag_remove) {
-        if (binary->path) {
-            HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
-            LOG_MSG("No Monitoring: %s", binary->path);
-        } else {
-            HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->argv[0]);
-            LOG_MSG("No Monitoring: %s", binary->argv[0]);
-        }
+        vpmu_stop_monitoring_binary(handler, binary);
     } else if (handler.flag_trace) {
-        if (binary->path == NULL) {
-            ERR_MSG("Can't find and execute %s", binary->argv[0]);
-            exit(4);
-        }
-        // Send the libraries to VPMU
-        vpmu_load_and_send_libs(handler, binary);
-        // Send the main program to VPMU (this must be the last one)
-        vpmu_load_and_send(handler, binary->path);
-
-        HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler.flag_model);
-        HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
-
-        vpmu_fork_exec(binary);
-        HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
-        HW_W(VPMU_MMAP_REPORT, VPMU_DONT_CARE);
+        vpmu_profile_binary(handler, binary);
     } else {
-        vpmu_fork_exec(binary);
+        vpmu_execute_binary(binary);
     }
     free_vpmu_binary(binary);
     free(cmd);

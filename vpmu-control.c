@@ -3,11 +3,11 @@
 
 #include "vpmu-control-lib.h"
 
-void check_arg_and_exit(int argc, int cur_idx, int req_num)
+static void check_arg_and_exit(int argc, char **argv, int cur_idx, int req_num)
 {
     if ((cur_idx + req_num) >= argc) {
         ERR_MSG("# of argument is not enough!");
-        ERR_MSG("This is happened at %dth argument", cur_idx + 1);
+        ERR_MSG("This is happened due to %dth argument, '%s'.", cur_idx, argv[cur_idx]);
         exit(4);
     }
 }
@@ -87,14 +87,14 @@ int main(int argc, char **argv)
     // Then parse all the action arguments
     for (i = 0; i < argc; i++) {
         if (arg_is_2(argv[i], "--read", "-r")) {
-            check_arg_and_exit(argc, i, 1);
-            uint64_t index = atoll(argv[++i]);
-            uint64_t value = vpmu_read_value(handler, index);
-            printf("%" PRIu64 "\n", value);
+            check_arg_and_exit(argc, argv, i, 1);
+            uintptr_t index = atoll(argv[++i]);
+            uintptr_t value = vpmu_read_value(handler, index);
+            printf("%zu\n", value);
         } else if (arg_is_2(argv[i], "--write", "-w")) {
-            check_arg_and_exit(argc, i, 2);
-            uint64_t index = atoll(argv[++i]);
-            uint64_t value = atoll(argv[++i]);
+            check_arg_and_exit(argc, argv, i, 2);
+            uintptr_t index = atoll(argv[++i]);
+            uintptr_t value = atoll(argv[++i]);
             vpmu_write_value(handler, index, value);
         } else if (arg_is(argv[i], "--start")) {
             // Only do this when it's not in trace mode
@@ -105,8 +105,8 @@ int main(int argc, char **argv)
         } else if (arg_is(argv[i], "--report")) {
             vpmu_print_report(handler);
         } else if (arg_is_2(argv[i], "--exec", "-e")) {
-            check_arg_and_exit(argc, i, 1);
-            vpmu_profile(handler, argv[++i]);
+            check_arg_and_exit(argc, argv, i, 1);
+            vpmu_do_exec(handler, argv[++i]);
         }
     }
 
