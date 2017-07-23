@@ -1,5 +1,5 @@
-#ifndef __VPMU_PATH_LIB_H
-#define __VPMU_PATH_LIB_H
+#ifndef __VPMU_PATH_LIB_H_
+#define __VPMU_PATH_LIB_H_
 
 #include <stdlib.h>
 #include <unistd.h>  // access()

@@ -1,5 +1,5 @@
-#ifndef __VPMU_CONTROL_LIB_H
-#define __VPMU_CONTROL_LIB_H
+#ifndef __VPMU_CONTROL_LIB_H_
+#define __VPMU_CONTROL_LIB_H_
 #include <sys/types.h> // off_t
 #include <stdint.h>    // uint64_t
 #include <string.h>    // strcmp, etc.
