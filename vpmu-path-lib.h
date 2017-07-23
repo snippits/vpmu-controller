@@ -165,7 +165,7 @@ static inline char *locate_binary(const char *bname)
     return out_path;
 }
 
-static inline char *get_library_path(char *message)
+static inline char *get_library_path(const char *message)
 {
     char buff[1024] = "";
 
@@ -173,6 +173,11 @@ static inline char *get_library_path(char *message)
         // Format: libc.so.6 => /usr/lib/libc.so.6 (0x0000777777777777)
         // Get the string after "=>" and have it trimmed.
         char *str = trim(strstr(message, "=>") + strlen("=>"));
+        if (strstr(str, "not found")) {
+            DBG_MSG("%-30s'%s'\n", "[get_library_path]", message);
+            free(str);
+            return NULL;
+        }
         // Tokenize the string will get us only the path
         tokenize(str);
         // Solve the symbolic link
