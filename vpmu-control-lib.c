@@ -7,9 +7,9 @@
 #include <fcntl.h>    // open(), close()
 #include <libgen.h>   // basename(), dirname()
 
-#include "efd.h"
-#include "vpmu-control-lib.h"
-#include "vpmu-path-lib.h" // Helpers functions to parse string like shell
+#include "vpmu-control-lib.h" // Main headers
+#include "vpmu-path-lib.h"    // Helpers functions to parse string like shell
+#include "vpmu-elf.h"         // Helpers functions for ELF formats
 
 size_t load_binary(const char *file_path, char **out_buffer)
 {
@@ -164,29 +164,6 @@ void vpmu_reset_counters(VPMUHandler handler)
 {
     HW_W(VPMU_MMAP_SET_TIMING_MODEL, handler.flag_model);
     HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
-}
-
-bool is_dynamic_binary(const char *file_path)
-{
-    if (file_path == NULL) return false;
-    size_t file_size = 0;
-    char * buffer    = NULL;
-    int    i         = 0;
-
-    file_size = load_binary(file_path, &buffer);
-    if (file_size == 0) return false;
-
-    // Check the magic word
-    if (startwith(&buffer[1], "ELF")) {
-        for (i = 0; i < file_size; i++) {
-            if (startwith(&buffer[i], "GLIBC_")) {
-                free(buffer);
-                return true;
-            }
-        }
-    }
-    free(buffer);
-    return false;
 }
 
 void vpmu_update_library_list(VPMUBinary *binary)

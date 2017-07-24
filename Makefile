@@ -5,8 +5,8 @@ ARM_LD=arm-linux-gnueabi-ld
 CFLAGS=-g -Wall -O1
 LFLAGS=
 
-SRCS=vpmu-control.c vpmu-control-lib.c efd.c
-HEADERS=vpmu-control-lib.h vpmu-path-lib.h
+SRCS=vpmu-control.c vpmu-control-lib.c vpmu-elf.c
+HEADERS=vpmu-control-lib.h vpmu-path-lib.h vpmu-elf.h
 TARGETS=vpmu-control-arm vpmu-control-x86 vpmu-control-dry-run
 ifneq ($(KERNELDIR_ARM),)
 TARGETS +=device_driver/vpmu-device-arm.ko
