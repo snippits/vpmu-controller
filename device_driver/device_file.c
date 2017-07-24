@@ -151,7 +151,7 @@ static ssize_t device_file_write(struct file *file_ptr,
 
 out:
     mutex_unlock(&dev->vpmu_mutex);
-    return count;
+    return retval;
 }
 
 static int device_file_open(struct inode *inode, struct file *file_ptr)
