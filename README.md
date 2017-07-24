@@ -42,3 +42,12 @@ DO ANYTHING YOU WANT
 ./vpmu-control-arm --jit --phase --all_models --start --exec "ls -al" --end
 ```
 
+# Known Possible Issues
+
+1. If the following message shows, it means your compiler turn on PIE (position independent executables) as default.
+The solution is patching the __Makefile__ of your Linux kernel as mentioned in
+this [thread](https://unix.stackexchange.com/questions/319761/cannot-compile-kernel-error-kernel-does-not-support-pic-mode)
+```
+cc1: error: code model kernel does not support PIC mode
+```
+
