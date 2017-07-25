@@ -53,7 +53,6 @@ typedef struct VPMUBinary {
 size_t load_binary(const char *file_path, char **out_buffer);
 bool arg_is(const char *args, const char *str);
 bool arg_is_2(const char *args, const char *str1, const char *str2);
-void vpmu_print_help_message(const char *self);
 
 VPMUHandler vpmu_open(const char *dev_path);
 void vpmu_close(VPMUHandler handler);

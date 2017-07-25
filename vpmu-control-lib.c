@@ -50,45 +50,6 @@ bool arg_is_2(const char *args, const char *str1, const char *str2)
     return (strcmp(args, str1) == 0) || (strcmp(args, str2) == 0);
 }
 
-void vpmu_print_help_message(const char *self)
-{
-#define HELP_MESG                                                                        \
-    "Usage: %s [options] {actions...}\n"                                                 \
-    "Options:\n"                                                                         \
-    "  --mem         Use /dev/mem instead of /dev/vpmu-device-0 for communication\n"     \
-    ""                                                                                   \
-    "  --jit         Enable just-in-time model selection on performance simulation\n"    \
-    "  --trace       Enable VPMU event tracing and function tracking ability\n"          \
-    "                If \"--trace\" is set, the process will be traced automatically\n"  \
-    "  --phase       Enable VPMU phase detection, --trace will be forced to set\n"       \
-    "  --[MODEL]     [MODEL] could be one of the following\n"                            \
-    "                    inst, cache, branch, pipeline, all_models\n"                    \
-    "  --monitor     Enable VPMU event tracing and set the binary without\n"             \
-    "                executing them when using -e action\n"                              \
-    "  --remove      Remove binary (specified by -e option) from monitoring list\n"      \
-    "  --help        Show this message\n"                                                \
-    "\n\n"                                                                               \
-    "Actions:\n"                                                                         \
-    "  -r, --read  <address>          Read data from <address> of VPMU and print it "    \
-    "out with \"\\n\"\n"                                                                 \
-    "  -w, --write <address> <data>   Write <data> to <address> of VPMU\n"               \
-    "  --start       Start VPMU profiling with all performance simulators ON\n"          \
-    "                If \"--trace\" is set, \"--start\" do nothing\n"                    \
-    "  --end         End/Stop VPMU profiling and report the results\n"                   \
-    "                If \"--trace\" is set, \"--end\" do nothing\n"                      \
-    "  --report      Simply report the current results. It can be used while profiling " \
-    "\n"                                                                                 \
-    "  -e, --exec    Run the program/executable.\n"                                      \
-    "                If \"--trace\" is set, the controller will also pass some of the "  \
-    "sections\n"                                                                         \
-    "                (i.e. symbol table, dynamic libraries) of target binary to VPMU.\n" \
-    "\n"                                                                                 \
-    "Example:\n"                                                                         \
-    "    ./vpmu-control-arm --all_models --start --exec \"ls -la\" --end\n"
-
-    printf(HELP_MESG, self);
-}
-
 VPMUHandler vpmu_open(const char *dev_path)
 {
     VPMUHandler handler = {}; // Zero initialized
