@@ -352,13 +352,12 @@ void free_vpmu_binary(VPMUBinary *bin)
 
 void vpmu_execute_binary(VPMUBinary *binary)
 {
-    pid_t pid = fork();
-
     if (binary == NULL || binary->path == NULL || strlen(binary->path) == 0) {
-        ERR_MSG("Error, command is empty");
-        return;
+        ERR_MSG("Error, command '%s' not found", binary->argv[0]);
+        exit(4);
     }
 
+    pid_t pid = fork();
     if (pid == -1) {
         ERR_MSG("Error, failed to fork()");
     } else if (pid > 0) {
