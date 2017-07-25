@@ -5,9 +5,12 @@ ARM_LD=arm-linux-gnueabi-ld
 CFLAGS=-g -Wall -O1
 LFLAGS=
 
-SRCS=vpmu-control.c vpmu-control-lib.c vpmu-elf.c
+SRCS=vpmu-control-lib.c vpmu-elf.c
 HEADERS=vpmu-control-lib.h vpmu-path-lib.h vpmu-elf.h
+VPMU_CONTROL_SRCS=vpmu-control.c $(SRCS)
+VPMU_PERF_SRCS=vpmu-perf.c $(SRCS)
 TARGETS=vpmu-control-arm vpmu-control-x86 vpmu-control-dry-run
+TARGETS+=vpmu-perf-arm vpmu-perf-x86 vpmu-perf-dry-run
 ifneq ($(KERNELDIR_ARM),)
 TARGETS +=device_driver/vpmu-device-arm.ko
 DRIVER_SRC=$(wildcard device_driver/*.c)
@@ -23,17 +26,29 @@ endif
 
 all:	$(TARGETS)
 
-vpmu-control-x86:	$(SRCS) $(HEADERS)
+vpmu-perf-x86:	$(VPMU_PERF_SRCS) $(HEADERS)
 	@echo "  CC      $@"
-	@$(CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS)
+	@$(CC) $(VPMU_PERF_SRCS) -o $@ $(CFLAGS) $(LFLAGS)
 
-vpmu-control-dry-run:	$(SRCS) $(HEADERS)
+vpmu-perf-dry-run:	$(VPMU_PERF_SRCS) $(HEADERS)
 	@echo "  CC      $@"
-	@$(CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
+	@$(CC) $(VPMU_PERF_SRCS) -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
 
-vpmu-control-arm:	$(SRCS) $(HEADERS)
+vpmu-perf-arm:	$(VPMU_PERF_SRCS) $(HEADERS)
 	@echo "  ARM_CC  $@"
-	@$(ARM_CC) $(SRCS) -o $@ $(CFLAGS) $(LFLAGS)
+	@$(ARM_CC) $(VPMU_PERF_SRCS) -o $@ $(CFLAGS) $(LFLAGS)
+
+vpmu-control-x86:	$(VPMU_CONTROL_SRCS) $(HEADERS)
+	@echo "  CC      $@"
+	@$(CC) $(VPMU_CONTROL_SRCS) -o $@ $(CFLAGS) $(LFLAGS)
+
+vpmu-control-dry-run:	$(VPMU_CONTROL_SRCS) $(HEADERS)
+	@echo "  CC      $@"
+	@$(CC) $(VPMU_CONTROL_SRCS) -o $@ $(CFLAGS) $(LFLAGS) -DDRY_RUN
+
+vpmu-control-arm:	$(VPMU_CONTROL_SRCS) $(HEADERS)
+	@echo "  ARM_CC  $@"
+	@$(ARM_CC) $(VPMU_CONTROL_SRCS) -o $@ $(CFLAGS) $(LFLAGS)
 
 device_driver/vpmu-device-arm.ko:	$(DRIVER_SRC) $(DRIVER_HEADER)
 	@rm -f ./vpmu-device-arm.ko

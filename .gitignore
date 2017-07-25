@@ -11,6 +11,9 @@ tags
 vpmu-control-arm
 vpmu-control-x86
 vpmu-control-dry-run
+vpmu-perf-arm
+vpmu-perf-x86
+vpmu-perf-dry-run
 
 # Linux headers
 *.ko

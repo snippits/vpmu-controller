@@ -2,6 +2,7 @@
 #define __VPMU_PATH_LIB_H_
 
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>  // access()
 #include <stdbool.h> // bool, true, false
 #include <ctype.h>   // isspace()
@@ -12,7 +13,7 @@
 #ifndef DBG_MSG
 #define DBG_MSG(str, ...)                                                                \
     do {                                                                                 \
-        if (getenv("DEBUG") != NULL) printf(str, ##__VA_ARGS__)                          \
+        if (getenv("DEBUG") != NULL) printf(str, ##__VA_ARGS__);                         \
     } while (0)
 #endif
 
