@@ -5,8 +5,8 @@
 #include <elf.h> // ELF header
 
 bool is_ELF(void *eh_ptr);
-void read_elf64_header(int32_t fd, Elf64_Ehdr *elf_header);
-void read_elf32_header(int32_t fd, Elf32_Ehdr *elf_header);
+bool read_elf64_header(int32_t fd, Elf64_Ehdr *elf_header);
+bool read_elf32_header(int32_t fd, Elf32_Ehdr *elf_header);
 Elf64_Phdr *read_elf64_program_header(int32_t fd, const Elf64_Ehdr elf_header);
 Elf32_Phdr *read_elf32_program_header(int32_t fd, const Elf32_Ehdr elf_header);
 bool is_elf64_dynamic(Elf64_Ehdr elf_header, Elf64_Phdr *program_header);

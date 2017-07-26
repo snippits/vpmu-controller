@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>  // strncmp()
-#include <assert.h>  // assert()
 #include <stdbool.h> // bool
 #include <unistd.h>  // lseek()
 #include <fcntl.h>   // open()
@@ -21,37 +20,49 @@ bool is_ELF(void *eh_ptr)
     }
 }
 
-void read_elf64_header(int32_t fd, Elf64_Ehdr *elf_header)
+bool read_elf64_header(int32_t fd, Elf64_Ehdr *elf_header)
 {
-    assert(elf_header != NULL);
-    assert(lseek(fd, (off_t)0, SEEK_SET) == (off_t)0);
-    assert(read(fd, (void *)elf_header, sizeof(Elf64_Ehdr)) == sizeof(Elf64_Ehdr));
+    if (elf_header == NULL) return false;
+    if (lseek(fd, (off_t)0, SEEK_SET) != (off_t)0) return false;
+    if (read(fd, (void *)elf_header, sizeof(Elf64_Ehdr)) != sizeof(Elf64_Ehdr))
+        return false;
+    return true;
 }
 
-void read_elf32_header(int32_t fd, Elf32_Ehdr *elf_header)
+bool read_elf32_header(int32_t fd, Elf32_Ehdr *elf_header)
 {
-    assert(elf_header != NULL);
-    assert(lseek(fd, (off_t)0, SEEK_SET) == (off_t)0);
-    assert(read(fd, (void *)elf_header, sizeof(Elf32_Ehdr)) == sizeof(Elf32_Ehdr));
+    if (elf_header == NULL) return false;
+    if (lseek(fd, (off_t)0, SEEK_SET) != (off_t)0) return false;
+    if (read(fd, (void *)elf_header, sizeof(Elf32_Ehdr)) != sizeof(Elf32_Ehdr))
+        return false;
+    return true;
 }
 
 Elf64_Phdr *read_elf64_program_header(int32_t fd, const Elf64_Ehdr elf_header)
 {
-    const uint64_t buff_size      = elf_header.e_phnum * sizeof(Elf64_Phdr);
-    Elf64_Phdr *   program_header = (Elf64_Phdr *)malloc(buff_size);
-    assert(program_header != NULL);
-    assert(lseek(fd, (off_t)elf_header.e_phoff, SEEK_SET) == (off_t)elf_header.e_phoff);
-    assert(read(fd, (void *)program_header, buff_size) == buff_size);
+    const uint64_t buff_size = elf_header.e_phnum * sizeof(Elf64_Phdr);
+    if (lseek(fd, (off_t)elf_header.e_phoff, SEEK_SET) != (off_t)elf_header.e_phoff)
+        return NULL;
+    Elf64_Phdr *program_header = (Elf64_Phdr *)malloc(buff_size);
+    if (program_header == NULL) return NULL;
+    if (read(fd, (void *)program_header, buff_size) != buff_size) {
+        free(program_header);
+        return NULL;
+    }
     return program_header;
 }
 
 Elf32_Phdr *read_elf32_program_header(int32_t fd, const Elf32_Ehdr elf_header)
 {
-    const uint64_t buff_size      = elf_header.e_phnum * sizeof(Elf32_Phdr);
-    Elf32_Phdr *   program_header = (Elf32_Phdr *)malloc(buff_size);
-    assert(program_header != NULL);
-    assert(lseek(fd, (off_t)elf_header.e_phoff, SEEK_SET) == (off_t)elf_header.e_phoff);
-    assert(read(fd, (void *)program_header, buff_size) == buff_size);
+    const uint64_t buff_size = elf_header.e_phnum * sizeof(Elf32_Phdr);
+    if (lseek(fd, (off_t)elf_header.e_phoff, SEEK_SET) != (off_t)elf_header.e_phoff)
+        return NULL;
+    Elf32_Phdr *program_header = (Elf32_Phdr *)malloc(buff_size);
+    if (program_header == NULL) return NULL;
+    if (read(fd, (void *)program_header, buff_size) != buff_size) {
+        free(program_header);
+        return NULL;
+    }
     return program_header;
 }
 
@@ -62,6 +73,7 @@ bool is_elf64_dynamic(Elf64_Ehdr elf_header, Elf64_Phdr *program_header)
     // Iterative variable
     int i;
 
+    if (program_header == NULL) return false;
     for (i = 0; i < elf_header.e_phnum; i++) {
         if (program_header[i].p_type == PT_INTERP) dynamic_flag = true;
         if (program_header[i].p_type == PT_DYNAMIC) interp_flag = true;
@@ -76,6 +88,7 @@ bool is_elf32_dynamic(Elf32_Ehdr elf_header, Elf32_Phdr *program_header)
     // Iterative variable
     int i;
 
+    if (program_header == NULL) return false;
     for (i = 0; i < elf_header.e_phnum; i++) {
         if (program_header[i].p_type == PT_INTERP) dynamic_flag = true;
         if (program_header[i].p_type == PT_DYNAMIC) interp_flag = true;
@@ -109,14 +122,14 @@ bool is_dynamic_binary(const char *file_path)
         Elf32_Ehdr  eh;   // elf-header is fixed size
         Elf32_Phdr *phdr; // program-header is variable size
 
-        read_elf32_header(fd, &eh);
+        if (!read_elf32_header(fd, &eh)) return false;
         phdr = read_elf32_program_header(fd, eh);
         return is_elf32_dynamic(eh, phdr);
     } else if (ws == 64) {
         Elf64_Ehdr  eh;   // elf-header is fixed size
         Elf64_Phdr *phdr; // program-header is variable size
 
-        read_elf64_header(fd, &eh);
+        if (!read_elf64_header(fd, &eh)) return false;
         phdr = read_elf64_program_header(fd, eh);
         return is_elf64_dynamic(eh, phdr);
     }
