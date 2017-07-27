@@ -399,7 +399,10 @@ void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary)
         vpmu_load_and_send_libs(handler, binary);
         // Send the main program to VPMU (this must be the last one)
         vpmu_load_and_send(handler, binary->path, binary->script_path);
-        LOG_MSG("Monitoring: '%s'", binary->path);
+        if (binary->is_script)
+            LOG_MSG("Monitoring: '%s'", binary->script_path);
+        else
+            LOG_MSG("Monitoring: '%s'", binary->path);
     } else {
         // Just tell VPMU to monitor the process with the name
         HW_W(VPMU_MMAP_ADD_PROC_NAME, binary->argv[0]);
