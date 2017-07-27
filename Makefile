@@ -2,7 +2,7 @@
 CC=gcc
 ARM_CC=arm-linux-gnueabi-gcc
 ARM_LD=arm-linux-gnueabi-ld
-CFLAGS=-g -Wall -O1
+CFLAGS=-g -Wall -Wno-unused-result -O1
 LFLAGS=
 
 SRCS=vpmu-control-lib.c vpmu-elf.c
