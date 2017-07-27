@@ -127,6 +127,42 @@ void vpmu_reset_counters(VPMUHandler handler)
     HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
 }
 
+char *read_first_line(const char *path)
+{
+    if (path == NULL) return NULL;
+    FILE *fp     = fopen(path, "rt");
+    char *output = NULL;
+
+    if (fp) {
+        int  i;
+        char buffer[128];
+        int  len = fread(buffer, 1, sizeof(buffer), fp);
+
+        for (i = 0; i < len; i++) {
+            // Break if hit any non-character word
+            if (buffer[i] < 0) {
+                // Return fail if ASCII-check fails
+                if (output) {
+                    free(output);
+                    output = NULL;
+                }
+                break;
+            }
+            // Find the character of nextline
+            if (output == NULL && buffer[i] == '\n') {
+                // Replace it with End of String
+                buffer[i] = '\0';
+                // Return the copy of line
+                output = strdup(buffer);
+                // Do not break here to allow checking ASCII on the whole string
+            }
+        }
+        fclose(fp);
+    }
+
+    return output;
+}
+
 void vpmu_update_library_list(VPMUBinary *binary)
 {
     if (!is_dynamic_binary(binary->path)) return;
@@ -154,7 +190,9 @@ void vpmu_update_library_list(VPMUBinary *binary)
     fclose(fp);
 }
 
-void vpmu_load_and_send(VPMUHandler handler, const char *file_path)
+void vpmu_load_and_send(VPMUHandler handler,
+                        const char *binary_path,
+                        const char *script_path)
 {
     // The final path
     char path[1024] = {};
@@ -163,13 +201,13 @@ void vpmu_load_and_send(VPMUHandler handler, const char *file_path)
     // The size of buffer
     size_t size = 0;
 
-    if (file_path == NULL) return;
-    if (access(file_path, F_OK) != -1) {
+    if (binary_path == NULL) return;
+    if (access(binary_path, F_OK) != -1) {
         // File exist, send it even it's not executable
-        strncpy(path, file_path, sizeof(path));
-        DBG_MSG("%-30s%s\n", "[vpmu_load_and_send]", "file_path exists");
+        strncpy(path, binary_path, sizeof(path));
+        DBG_MSG("%-30s%s\n", "[vpmu_load_and_send]", "binary_path exists");
     } else { // Find executables in the $PATH
-        char *basec = strdup(file_path);
+        char *basec = strdup(binary_path);
         char *bpath = locate_binary(basename(basec));
         strncpy(path, bpath, sizeof(path));
         free(basec);
@@ -179,7 +217,13 @@ void vpmu_load_and_send(VPMUHandler handler, const char *file_path)
 
     size = load_binary(path, &buffer);
     if (size > 0) {
-        HW_W(VPMU_MMAP_ADD_PROC_NAME, path);
+        if (script_path) {
+            // Use script path if there is one
+            HW_W(VPMU_MMAP_ADD_PROC_NAME, script_path);
+        } else {
+            HW_W(VPMU_MMAP_ADD_PROC_NAME, path);
+        }
+        // Always pass main (real) binary even it's a script
         HW_W(VPMU_MMAP_SET_PROC_SIZE, size);
         HW_W(VPMU_MMAP_SET_PROC_BIN, buffer);
 
@@ -203,7 +247,7 @@ void vpmu_load_and_send_libs(VPMUHandler handler, VPMUBinary *binary)
             DBG_MSG("%-30sskip '%s'\n", "[vpmu_load_and_send_libs]", path);
             continue;
         } else {
-            vpmu_load_and_send(handler, path);
+            vpmu_load_and_send(handler, path, NULL);
         }
     }
 }
@@ -279,10 +323,22 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
         free(basec);
     }
 
+    char *line = read_first_line(binary->path);
+    if (line && startwith(line, "#!/")) {
+        char *bin_path = &line[2]; // Skip #!
+
+        binary->is_script   = true;
+        binary->script_path = binary->path;     // Reset path to script path
+        binary->path        = strdup(bin_path); // Set the real binary path
+        free(line);
+    }
+
     DRY_MSG("Command String   : '%s'\n", binary->cmd);
     DRY_MSG("Absolute Dir     : '%s'\n", binary->absolute_dir);
     DRY_MSG("Relative Dir     : '%s'\n", binary->relative_dir);
     DRY_MSG("Binary name      : '%s'\n", binary->file_name);
+    DRY_MSG("Binary Path      : '%s'\n", binary->path);
+    if (binary->is_script) DRY_MSG("Script Path      : '%s'\n", binary->script_path);
     DRY_MSG("# of arguments   : %d\n", binary->argc);
     for (i = 0; i < binary->argc; i++) {
         DRY_MSG("    ARG[%d]      : '%s'\n", i, binary->argv[i]);
@@ -327,7 +383,11 @@ void vpmu_execute_binary(VPMUBinary *binary)
     } else {
         LOG_MSG("Executing '%s'", binary->path);
         // we are the child
-        execvp(binary->path, binary->argv);
+        if (binary->is_script) {
+            execvp(binary->script_path, binary->argv);
+        } else {
+            execvp(binary->path, binary->argv);
+        }
         _exit(EXIT_FAILURE); // exec never returns
     }
 }
@@ -338,7 +398,7 @@ void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary)
         // Send the libraries to VPMU
         vpmu_load_and_send_libs(handler, binary);
         // Send the main program to VPMU (this must be the last one)
-        vpmu_load_and_send(handler, binary->path);
+        vpmu_load_and_send(handler, binary->path, binary->script_path);
         LOG_MSG("Monitoring: '%s'", binary->path);
     } else {
         // Just tell VPMU to monitor the process with the name
@@ -352,8 +412,13 @@ void vpmu_monitor_binary(VPMUHandler handler, VPMUBinary *binary)
 void vpmu_stop_monitoring_binary(VPMUHandler handler, VPMUBinary *binary)
 {
     if (binary->path) {
-        HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
-        LOG_MSG("Stop Monitoring: '%s'", binary->path);
+        if (binary->is_script) {
+            HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->script_path);
+            LOG_MSG("Stop Monitoring: '%s'", binary->script_path);
+        } else {
+            HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->path);
+            LOG_MSG("Stop Monitoring: '%s'", binary->path);
+        }
     } else {
         HW_W(VPMU_MMAP_REMOVE_PROC_NAME, binary->argv[0]);
         LOG_MSG("Stop Monitoring: '%s'", binary->argv[0]);
@@ -369,7 +434,11 @@ void vpmu_profile_binary(VPMUHandler handler, VPMUBinary *binary)
     // Send the libraries to VPMU
     vpmu_load_and_send_libs(handler, binary);
     // Send the main program to VPMU (this must be the last one)
-    vpmu_load_and_send(handler, binary->path);
+    if (binary->is_script) {
+        vpmu_load_and_send(handler, binary->path, binary->script_path);
+    } else {
+        vpmu_load_and_send(handler, binary->path, NULL);
+    }
 
     vpmu_reset_counters(handler);
     vpmu_execute_binary(binary);

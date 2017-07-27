@@ -40,10 +40,12 @@ typedef struct VPMUHandler {
 } VPMUHandler;
 
 typedef struct VPMUBinary {
+    bool  is_script;
     char *libraries[512];
     char *absolute_dir;
     char *relative_dir;
     char *path;
+    char *script_path;
     char *file_name;
     char *argv[256];
     int   argc;
@@ -63,9 +65,12 @@ void vpmu_start_fullsystem_tracing(VPMUHandler handler);
 void vpmu_end_fullsystem_tracing(VPMUHandler handler);
 void vpmu_reset_counters(VPMUHandler handler);
 
+char *read_first_line(const char *path);
 bool is_dynamic_binary(const char *file_path);
 void vpmu_update_library_list(VPMUBinary *binary);
-void vpmu_load_and_send(VPMUHandler handler, const char *file_path);
+void vpmu_load_and_send(VPMUHandler handler,
+                        const char *binary_path,
+                        const char *script_path);
 void vpmu_load_and_send_libs(VPMUHandler handler, VPMUBinary *binary);
 
 VPMUBinary *parse_all_paths_args(const char *cmd);
