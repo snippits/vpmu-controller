@@ -36,7 +36,10 @@ static int parse_options(VPMUHandler *handler, int argc, char **argv)
     for (i = 1; i < argc; i++) {
         // Return at first non -- argument
         if (!startwith(argv[i], "--")) return i;
-        if (arg_is(argv[i], "--jit")) {
+        if (arg_is(argv[i], "--help")) {
+            print_help_message(argv[0]);
+            exit(0);
+        } else if (arg_is(argv[i], "--jit")) {
             DRY_MSG("enable jit\n");
             handler->flag_jit = true;
             handler->flag_model |= VPMU_JIT_MODEL_SELECT;
@@ -121,9 +124,6 @@ int main(int argc, char **argv)
     for (i = 0; i < argc; i++) {
         if (arg_is(argv[i], "--mem")) {
             strcpy(dev_path, "/dev/mem");
-        } else if (arg_is_2(argv[i], "--help", "-h")) {
-            print_help_message(argv[0]);
-            exit(0);
         }
     }
     // After parsing the real path of vpmu-device and help message,
