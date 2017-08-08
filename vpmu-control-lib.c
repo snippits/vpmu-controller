@@ -127,6 +127,28 @@ void vpmu_reset_counters(VPMUHandler handler)
     HW_W(VPMU_MMAP_RESET, VPMU_DONT_CARE);
 }
 
+bool is_ascii_file(const char *path)
+{
+    if (path == NULL) return NULL;
+    FILE *fp = fopen(path, "rt");
+
+    if (fp) {
+        int  i;
+        char buffer[8192]; // 8K bytes checking
+        int  len = fread(buffer, 1, sizeof(buffer), fp);
+        fclose(fp);
+
+        for (i = 0; i < len; i++) {
+            // Return false if hit any non-character word
+            if (!isascii(buffer[i])) {
+                return false;
+            }
+        }
+    }
+
+    return true;
+}
+
 char *read_first_line(const char *path)
 {
     if (path == NULL) return NULL;
@@ -137,10 +159,11 @@ char *read_first_line(const char *path)
         int  i;
         char buffer[128];
         int  len = fread(buffer, 1, sizeof(buffer), fp);
+        fclose(fp);
 
         for (i = 0; i < len; i++) {
             // Break if hit any non-character word
-            if (buffer[i] < 0) {
+            if (!isascii(buffer[i])) {
                 // Return fail if ASCII-check fails
                 if (output) {
                     free(output);
@@ -157,7 +180,6 @@ char *read_first_line(const char *path)
                 // Do not break here to allow checking ASCII on the whole string
             }
         }
-        fclose(fp);
     }
 
     return output;
@@ -276,6 +298,13 @@ static char *form_rel_path(VPMUBinary *binary)
     return path;
 }
 
+static void set_binary_as_a_script(VPMUBinary *binary, const char *bin_path)
+{
+    binary->is_script   = true;
+    binary->script_path = binary->path;     // Reset path to script path
+    binary->path        = strdup(bin_path); // Set the real binary path
+}
+
 // "cmd" is an input argument, others are output arguments
 VPMUBinary *parse_all_paths_args(const char *cmd)
 {
@@ -290,6 +319,7 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
     // Tokenize the command string into argv
     binary->argc = tokenize_to_argv(cmd, binary->argv);
 
+    // This is just a double check in case cmd is an empty string
     if (binary->argv[0]) {
         char *dirc  = strdup(binary->argv[0]);
         char *basec = strdup(binary->argv[0]);
@@ -324,12 +354,13 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
     }
 
     char *line = read_first_line(binary->path);
-    if (line && startwith(line, "#!/")) {
-        char *bin_path = &line[2]; // Skip #!
-
-        binary->is_script   = true;
-        binary->script_path = binary->path;     // Reset path to script path
-        binary->path        = strdup(bin_path); // Set the real binary path
+    if (line) {
+        if (startwith(line, "#!/")) {
+            set_binary_as_a_script(binary, &line[2]); // Skip #!
+        } else if (access(binary->path, X_OK) != -1 && is_ascii_file(binary->path)) {
+            ERR_MSG("Fallback detect as a bash script!!\n\n");
+            set_binary_as_a_script(binary, "/bin/bash");
+        }
         free(line);
     }
 
@@ -349,6 +380,12 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
                 binary->argv[0]);
     }
 
+    // Check whether the target binary is executable if it exists
+    if (access(binary->path, F_OK) != -1 && access(binary->path, X_OK) == -1) {
+        ERR_MSG("Target binary '%s' is not executable!", binary->path);
+        free(binary->path);
+        binary->path = NULL;
+    }
     return binary;
 }
 
@@ -459,6 +496,7 @@ void vpmu_do_exec(VPMUHandler handler, const char *cmd_str)
         vpmu_update_library_list(binary);
         free(cmd);
     }
+    if (binary == NULL) return;
 
     if (handler.flag_monitor) {
         vpmu_monitor_binary(handler, binary);

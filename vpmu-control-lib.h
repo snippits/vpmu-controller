@@ -65,6 +65,7 @@ void vpmu_start_fullsystem_tracing(VPMUHandler handler);
 void vpmu_end_fullsystem_tracing(VPMUHandler handler);
 void vpmu_reset_counters(VPMUHandler handler);
 
+bool is_ascii_file(const char *path);
 char *read_first_line(const char *path);
 bool is_dynamic_binary(const char *file_path);
 void vpmu_update_library_list(VPMUBinary *binary);

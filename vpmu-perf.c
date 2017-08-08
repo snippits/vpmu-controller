@@ -83,6 +83,7 @@ void profile_binary(VPMUHandler handler, int argc, char **argv)
 
     // Parse command string to VPMU binary struct
     VPMUBinary *binary = parse_all_paths_args(argv[0]);
+    if (binary == NULL) return;
     // Copy all the arguments to VPMU binary struct
     int i;
     binary->argc = argc;
