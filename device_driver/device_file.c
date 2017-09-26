@@ -12,6 +12,7 @@
 #include <linux/sched.h>  /* struct task_struct */
 #include <asm/current.h>  /* "current" process (per-core variable)*/
 #include <linux/version.h>
+#include <linux/uaccess.h> /* copy_to_user() copy_from_user() */
 
 #include <linux/vmalloc.h> /* vm_struct and vmalloc(), vmap() */
 #include <linux/mm.h>      /* vm_area_struct and remap_pfn_range() */
