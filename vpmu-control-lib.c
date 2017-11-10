@@ -230,7 +230,7 @@ void vpmu_load_and_send(VPMUHandler handler,
         DBG_MSG("%-30s%s\n", "[vpmu_load_and_send]", "binary_path exists");
     } else { // Find executables in the $PATH
         char *basec = strdup(binary_path);
-        char *bpath = locate_binary(basename(basec));
+        char *bpath = locate_path(basename(basec));
         strncpy(path, bpath, sizeof(path));
         free(basec);
         free(bpath);
@@ -328,7 +328,7 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
         char *path  = NULL;
 
         binary->file_name    = strdup(bname);
-        binary->absolute_dir = startwith(cmd, "/") ? strdup(dname) : locate_binary(bname);
+        binary->absolute_dir = startwith(cmd, "/") ? strdup(dname) : locate_path(bname);
         binary->relative_dir = startwith(cmd, "./")
                                  ? strdup(dname)
                                  : startwith(cmd, "../") ? strdup(dname) : strdup("");
@@ -355,7 +355,11 @@ VPMUBinary *parse_all_paths_args(const char *cmd)
 
     char *line = read_first_line(binary->path);
     if (line) {
-        if (startwith(line, "#!/")) {
+        if (startwith(line, "#!/usr/bin/env")) {
+            char *path = locate_binary(&line[strlen("#!/usr/bin/env ")]);
+            set_binary_as_a_script(binary, path);
+            free(path);
+        } else if (startwith(line, "#!/")) {
             set_binary_as_a_script(binary, &line[2]); // Skip #!
         } else if (access(binary->path, X_OK) != -1 && is_ascii_file(binary->path)) {
             ERR_MSG("Fallback detect as a bash script!!\n\n");

@@ -154,7 +154,7 @@ static inline char *locate_binary(const char *bname)
         strcpy(full_path, pch);
         join_path(full_path, bname);
         if (access(full_path, X_OK) != -1) { // File exist and is executable
-            out_path = strdup(pch);
+            out_path = strdup(full_path);
             break;
         }
         pch = strtok(NULL, ":");
@@ -162,6 +162,32 @@ static inline char *locate_binary(const char *bname)
     free(sys_path);
 
     DBG_MSG("%-30s'%s'\n", "[locate_binary]", out_path);
+    if (out_path == NULL) return strdup(bname);
+    return out_path;
+}
+
+static inline char *locate_path(const char *bname)
+{
+    char *sys_path        = NULL;
+    char *pch             = NULL;
+    char *out_path        = NULL;
+    char  full_path[1024] = {};
+
+    if (bname == NULL) return strdup("");
+    sys_path = strdup(getenv("PATH"));
+    pch      = strtok(sys_path, ":");
+    while (pch != NULL) {
+        strcpy(full_path, pch);
+        join_path(full_path, bname);
+        if (access(full_path, X_OK) != -1) { // File exist and is executable
+            out_path = strdup(pch);
+            break;
+        }
+        pch = strtok(NULL, ":");
+    }
+    free(sys_path);
+
+    DBG_MSG("%-30s'%s'\n", "[locate_path]", out_path);
     if (out_path == NULL) return strdup("");
     return out_path;
 }
