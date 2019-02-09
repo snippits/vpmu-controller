@@ -1,7 +1,7 @@
 -include path.mak
 CC=gcc
-ARM_CC=arm-linux-gnueabi-gcc
-ARM_LD=arm-linux-gnueabi-ld
+ARM_CC=arm-linux-gnueabihf-gcc
+ARM_LD=arm-linux-gnueabihf-ld
 CFLAGS=-g -Wall -Wno-unused-result -O1
 LFLAGS=
 
