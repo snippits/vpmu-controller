@@ -167,8 +167,10 @@ static int simple_driver_init(void)
     pass_kernel_symbol("wake_up_new_task");
     pass_kernel_symbol("do_exit");
     pass_kernel_symbol("__switch_to");
-    if (!pass_kernel_symbol_prefix("do_execveat_common")) {
-        pass_kernel_symbol_prefix("do_execve_common");
+    if (!pass_kernel_symbol_prefix("__do_execve_file")) {
+        if (!pass_kernel_symbol_prefix("do_execveat_common")) {
+            pass_kernel_symbol_prefix("do_execve_common");
+        }
     }
 
     result = register_device();
